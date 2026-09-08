@@ -1401,15 +1401,26 @@ final class WorkspaceRepository
                     continue;
                 }
                 $attributes = is_array($resource['attributes'] ?? null) ? $resource['attributes'] : [];
-                $workspaces[] = new Workspace(
-                    (string) ($resource['id'] ?? ''),
-                    (string) ($attributes['name'] ?? ''),
-                );
+                $id = (string) ($resource['id'] ?? '');
+                $name = (string) ($attributes['name'] ?? '');
+
+                // 名前が引けないワークスペースはピッカーで選べず、空の id は
+                // 他の不正エントリと id => name のマップ上で衝突する。
+                if ($id === '' || $name === '') {
+                    continue;
+                }
+
+                $workspaces[] = new Workspace($id, $name);
             }
 
             $next = $document['meta']['pagination']['next-page'] ?? null;
 
             if ($next === null) {
+                break;
+            }
+
+            // カーソルが進まない応答が来たら、ハングせず打ち切る。
+            if ((int) $next <= $page) {
                 break;
             }
 
