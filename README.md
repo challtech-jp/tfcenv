@@ -46,6 +46,13 @@ that is cached in the Nix store.
 `make build` chains `composer install` → `libphpx` → `tpc` as needed, so it is
 the only command you normally run.
 
+`make test` excludes the `network` group by default, so the suite runs
+offline. To also run the test that hits the real Terraform Cloud API:
+
+```console
+$ composer test -- --group network
+```
+
 ## Why not the upstream TypePHP release binary
 
 `tpc_v0.7.0_macos_arm64.tar.gz` ships a `tpc` linked against Homebrew absolute
