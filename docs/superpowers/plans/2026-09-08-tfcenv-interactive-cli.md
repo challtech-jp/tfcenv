@@ -1902,7 +1902,9 @@ final class FakeTerminal implements Terminal
     public function readLine(): string
     {
         if ($this->lines === []) {
-            return '';
+            // FakeTransport と同じ方針。キューの数え間違いをハングではなく
+            // 即座の失敗にする。空行が欲しいテストは queueLine('') を明示する。
+            throw new \RuntimeException('FakeTerminal was asked to read a line with none queued');
         }
 
         return array_shift($this->lines);
@@ -4323,6 +4325,8 @@ use Tfcenv\Tfc\WorkspaceRepository;
 
 final class AddCommand
 {
+    private const MAX_EMPTY_KEYS = 3;
+
     public function __construct(
         private readonly WorkspaceRepository $workspaces,
         private readonly VariableRepository $variables,
@@ -4426,12 +4430,14 @@ final class AddCommand
     private function collectChanges(array $existing): array
     {
         $changes = [];
+        $collectedKeys = [];
 
         while (true) {
-            $change = $this->collectOne($existing);
+            $change = $this->collectOne($existing, $collectedKeys);
 
             if ($change !== null) {
                 $changes[] = $change;
+                $collectedKeys[$change->variable->key] = true;
             }
 
             if (!$this->prompt->confirm('Add another variable?', false)) {
@@ -4444,14 +4450,37 @@ final class AddCommand
      * 1件分を対話で組み立てる。Skip が選ばれたら null。
      *
      * @param array<string, Variable> $existing
+     * @param array<string, bool> $collectedKeys このバッチで既に積んだキー
      */
-    private function collectOne(array $existing): ?Change
+    private function collectOne(array $existing, array $collectedKeys): ?Change
     {
+        $emptyKeys = 0;
+
         while (true) {
             $key = $this->prompt->text('Key');
 
             if ($key === '') {
+                $emptyKeys++;
+
+                // readLine() は「空行の Enter」と EOF を同じ '' に潰すので、
+                // stdin が閉じると再入力を無限に促し続ける。回数で打ち切る。
+                if ($emptyKeys >= self::MAX_EMPTY_KEYS) {
+                    throw new CancelledException('no key was entered');
+                }
+
                 $this->terminal->write($this->style->dim('  a key is required') . "\n");
+                continue;
+            }
+
+            $emptyKeys = 0;
+
+            if (isset($collectedKeys[$key])) {
+                // 衝突検出は「送る前に気づく」ためにある。同一バッチ内の重複を
+                // apply 時の 422 まで持ち越さない。既に積んだ変更は Create で id を
+                // 持たないので、更新メニューを出すと id なしの PATCH になってしまう。
+                $this->terminal->write(
+                    $this->style->warn('  ' . $key . ' was already added in this session') . "\n"
+                );
                 continue;
             }
 

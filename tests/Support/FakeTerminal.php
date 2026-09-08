@@ -71,7 +71,9 @@ final class FakeTerminal implements Terminal
     public function readLine(): string
     {
         if ($this->lines === []) {
-            return '';
+            // FakeTransport と同じ方針。キューの数え間違いをハングではなく
+            // 即座の失敗にする。空行が欲しいテストは queueLine('') を明示する。
+            throw new \RuntimeException('FakeTerminal was asked to read a line with none queued');
         }
 
         return array_shift($this->lines);
