@@ -1,17 +1,13 @@
 <?php
 
+use Tfcenv\Cli\Application;
+use Tfcenv\Terminal\SttyTerminal;
+
 /**
- * Toolchain smoke test.
- *
- * TypePHP binary mode requires a global main() returning void, and forbids
- * top-level executable statements. The real CLI replaces this.
+ * TypePHP の binary モードはグローバルな main() を要求する。
+ * シグネチャは固定で、返り値は void なので終了コードは exit() で返す。
  */
 function main(int $argc, array $argv): void
 {
-    echo "tfcenv (toolchain smoke test)\n";
-    echo "  argc: {$argc}\n";
-
-    for ($i = 0; $i < $argc; $i++) {
-        echo "  argv[{$i}]: {$argv[$i]}\n";
-    }
+    exit((new Application(new SttyTerminal()))->run($argc, $argv));
 }

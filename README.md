@@ -6,12 +6,23 @@ through the web console.
 Written in PHP and AOT-compiled to a native binary with
 [TypePHP](https://github.com/swoole/typephp).
 
-> Status: development environment only. The CLI itself is not implemented yet.
-
 ## Requirements
 
 [Nix](https://nixos.org) with flakes enabled. Nothing else — no system PHP, no
 Homebrew.
+
+## Usage
+
+```console
+$ export TFC_TOKEN=...        # https://app.terraform.io/app/settings/tokens
+$ export TFC_ORG=acme    # optional default
+$ tfcenv add
+```
+
+`tfcenv add` walks you through picking a workspace and then registering one or
+more variables. Keys that already exist are detected before anything is sent,
+and offered as an update, a skip, or a different key. Nothing is written until
+you confirm.
 
 ## Development shell
 
