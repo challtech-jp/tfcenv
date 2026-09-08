@@ -6,3 +6,4 @@
 /result
 /result-*
 .DS_Store
+/.phpunit.cache/

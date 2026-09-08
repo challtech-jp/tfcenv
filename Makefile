@@ -23,7 +23,7 @@ JOBS     := $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
 RUN := composer run-script
 
-.PHONY: all vendor phpx build run doctor clean distclean
+.PHONY: all vendor phpx build run test doctor clean distclean
 
 all: build
 
@@ -46,6 +46,10 @@ $(TARGET): $(PHPX_LIB) project.yml $(SOURCES)
 ## run - run src/ through the PHP interpreter (no AOT build needed)
 run: vendor/autoload.php
 	@$(RUN) tfcenv -- $(ARGS)
+
+## test - run the PHPUnit suite through the interpreter
+test: vendor/autoload.php
+	@$(RUN) test
 
 ## doctor - show what the toolchain resolved to
 doctor:
