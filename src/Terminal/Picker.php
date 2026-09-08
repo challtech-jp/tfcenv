@@ -4,6 +4,15 @@ namespace Tfcenv\Terminal;
 
 final class Picker
 {
+    /** 回答済み行のラベル桁。Prompt と揃える。 */
+    private const LABEL_WIDTH = 12;
+
+    /** 質問行で入力の直前に置く区切り */
+    private const PENDING_MARK = '›';
+
+    /** 回答済み行でラベルと値を分ける区切り */
+    private const ANSWER_MARK = '·';
+
     public function __construct(
         private readonly Terminal $terminal,
         private readonly Style $style,
@@ -28,7 +37,6 @@ final class Picker
         $cursor = 0;
         $renderedLines = 0;
 
-        $this->terminal->write($this->style->accent('?') . ' ' . $label . "\n");
         $this->terminal->enterRawMode();
 
         try {
@@ -37,7 +45,7 @@ final class Picker
                 $cursor = $this->clamp($cursor, count($matches));
 
                 $this->clearLines($renderedLines);
-                $renderedLines = $this->render($filter, $matches, $cursor, count($items));
+                $renderedLines = $this->render($label, $filter, $matches, $cursor, count($items));
 
                 $key = $this->terminal->readKey();
 
@@ -49,12 +57,12 @@ final class Picker
                     if ($matches === []) {
                         throw new CancelledException('no candidate to select');
                     }
-                    return array_keys($matches)[$cursor];
+                    return $this->chosen($label, $matches, $cursor, $filter, $renderedLines);
                 }
 
                 if ($key === KeyMap::ENTER) {
                     if ($matches !== []) {
-                        return array_keys($matches)[$cursor];
+                        return $this->chosen($label, $matches, $cursor, $filter, $renderedLines);
                     }
                     continue;
                 }
@@ -86,6 +94,19 @@ final class Picker
         } finally {
             $this->terminal->restoreMode();
         }
+    }
+
+    /**
+     * 確定した候補を返し、リストを回答済みの1行に畳む。
+     *
+     * @param array<string,string> $matches
+     */
+    private function chosen(string $label, array $matches, int $cursor, string $filter, int $renderedLines): string
+    {
+        $value = array_keys($matches)[$cursor];
+        $this->collapse($label, $matches[$value], $renderedLines, $this->questionWidth($label, mb_strwidth($filter)));
+
+        return $value;
     }
 
     /**
@@ -128,19 +149,22 @@ final class Picker
     }
 
     /**
+     * 打った絞り込みはラベルと同じ行に出す。別に filter: 行を立てると
+     * 入力の位置が他のプロンプトとずれる。
+     *
      * @param array<string,string> $matches
      * @return int 描いた行数
      */
-    private function render(string $filter, array $matches, int $cursor, int $total): int
+    private function render(string $label, string $filter, array $matches, int $cursor, int $total): int
     {
-        $this->terminal->write('  ' . $this->style->dim('filter:') . ' ' . $filter . "\r\n");
+        $this->terminal->write($this->question($label) . $filter . "\r\n");
         $lines = 1;
 
         $labels = array_values($matches);
         $window = $this->window($cursor, count($labels));
 
         foreach ($window as $index) {
-            $marker = $index === $cursor ? $this->style->accent('>') : ' ';
+            $marker = $index === $cursor ? $this->style->accent('❯') : ' ';
             $text = $index === $cursor ? $this->style->bold($labels[$index]) : $labels[$index];
             $this->terminal->write('  ' . $marker . ' ' . $text . "\r\n");
             $lines++;
@@ -152,7 +176,7 @@ final class Picker
         }
 
         $this->terminal->write(
-            '  ' . $this->style->dim(sprintf('%d/%d shown, type to filter', count($matches), $total)) . "\r\n",
+            '  ' . $this->style->dim(sprintf('%d/%d · type to filter', count($matches), $total)) . "\r\n",
         );
         $lines++;
 
@@ -184,6 +208,58 @@ final class Picker
         }
 
         return $indexes;
+    }
+
+    /** 未回答の質問行。絞り込みの入力はこの行の続きに来る。 */
+    private function question(string $label): string
+    {
+        return $this->style->accent('?') . ' ' . $label . ' '
+            . $this->style->dim(self::PENDING_MARK) . ' ';
+    }
+
+    /** 質問行の表示幅。'? ' + ラベル + ' > ' + 絞り込み */
+    private function questionWidth(string $label, int $inputWidth): int
+    {
+        return 2 + mb_strwidth($label) + 3 + $inputWidth;
+    }
+
+    /** 回答済みの1行。ラベル桁は mb_strwidth で揃える（全角の説明があるため） */
+    private function answered(string $label, string $value): string
+    {
+        return $this->style->ok('✔') . ' ' . $this->padLabel($label) . ' '
+            . $this->style->dim(self::ANSWER_MARK) . ' ' . $value;
+    }
+
+    private function padLabel(string $label): string
+    {
+        $pad = self::LABEL_WIDTH - mb_strwidth($label);
+
+        return $pad > 0 ? $label . str_repeat(' ', $pad) : $label;
+    }
+
+    /**
+     * 出しているリストを「✔ ラベル · 値」1行に畳む。端末幅に収まらない
+     * ときは畳まず、出ているものをそのまま残す。TTY でなければカーソル
+     * 移動に意味がないので何もしない。
+     */
+    private function collapse(string $label, string $value, int $lines, int $shownWidth): void
+    {
+        if ($lines < 1 || !$this->terminal->isTty()) {
+            return;
+        }
+
+        $width = $this->terminal->width();
+
+        if ($shownWidth > $width) {
+            return;
+        }
+
+        if (2 + mb_strwidth($this->padLabel($label)) + 3 + mb_strwidth($value) > $width) {
+            return;
+        }
+
+        $this->clearLines($lines);
+        $this->terminal->write($this->answered($label, $value) . "\r\n");
     }
 
     private function clearLines(int $count): void

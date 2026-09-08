@@ -38,7 +38,9 @@ final class PromptTest extends TestCase
 
         $prompt->text('Organization', 'acme');
 
-        $this->assertStringContainsString('[acme]', $terminal->output());
+        // 既定値はラベルの直後、区切りより手前に出す。区切りの後ろは
+        // 端末が入力をエコーする場所なので空けておく。
+        $this->assertStringContainsString("? Organization [acme] \u{203A} ", $terminal->output());
     }
 
     public function testTextTrimsSurroundingWhitespace(): void
@@ -237,5 +239,73 @@ final class PromptTest extends TestCase
         } catch (CancelledException $e) {
             $this->assertSame(1, $terminal->rawModeRestored());
         }
+    }
+
+
+    public function testTextCollapsesTheAnsweredLine(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueLine('acme');
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $prompt->text('Organization', '');
+
+        $this->assertStringContainsString("\u{2714} Organization \u{B7} acme\r\n", $terminal->output());
+    }
+
+    public function testTextLeavesTheLineAloneWhenTheAnswerWouldNotFit(): void
+    {
+        // cooked モードの入力は端末がエコーする。折り返していると1行戻しても
+        // 消しきれず表示が壊れるので、幅に収まらないときは畳まない。
+        $terminal = new FakeTerminal();
+        $terminal->queueLine(str_repeat('v', 70));
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $prompt->text('Value');
+
+        $this->assertStringNotContainsString("\u{2714} Value", $terminal->output());
+    }
+
+    public function testHiddenCollapsesToAMaskedLine(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueTyping('s3cret');
+        $terminal->queueKeys(KeyMap::ENTER);
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $prompt->hidden('Value');
+
+        $this->assertStringContainsString("\u{2714} Value        \u{B7} \u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\r\n", $terminal->output());
+        $this->assertStringNotContainsString('s3cret', $terminal->output());
+    }
+
+    public function testConfirmCollapsesToYesOrNo(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueLine('y');
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $prompt->confirm('Sensitive');
+
+        $this->assertStringContainsString("\u{2714} Sensitive    \u{B7} Yes\r\n", $terminal->output());
+    }
+
+    public function testSelectShowsTheCursorAndCollapsesOnAnswer(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueKeys(KeyMap::DOWN, KeyMap::ENTER);
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $prompt->select('Category', [
+            'terraform' => 'terraform',
+            'env' => 'env',
+        ]);
+
+        $output = $terminal->output();
+
+        // 選択中の候補はラベル行にも出るので、入力位置は他のプロンプトと揃う。
+        $this->assertStringContainsString("? Category \u{203A} env\r\n", $output);
+        $this->assertStringContainsString("  \u{276F} env\r\n", $output);
+        $this->assertStringContainsString("\u{2714} Category     \u{B7} env\r\n", $output);
     }
 }

@@ -156,11 +156,57 @@ final class PickerTest extends TestCase
         $this->assertSame('ws-10', $chosen);
 
         // 最後の描画だけを見る。clearLines() はエスケープを書くだけで
-        // FakeTerminal の蓄積出力からは消えないため。
-        $renders = explode('filter:', $terminal->output());
-        $final = $renders[count($renders) - 1];
+        // FakeTerminal の蓄積出力からは消えないため。ヒント行は1描画に
+        // つき1回、しかも末尾に出るので、そこで割った最後から2番目が
+        // 最終描画のラベル行と候補行にあたる（末尾は畳んだ回答行）。
+        $renders = explode('· type to filter', $terminal->output());
+        $final = $renders[count($renders) - 2];
 
         $this->assertStringContainsString('workspace-10', $final);
         $this->assertStringNotContainsString('workspace-01', $final);
+    }
+
+    public function testTheFilterIsTypedOnTheLabelLine(): void
+    {
+        // 別の filter: 行を立てず、他のプロンプトと同じくラベルと同じ行で受ける。
+        $terminal = new FakeTerminal();
+        $terminal->queueTyping('beta');
+        $terminal->queueKeys(KeyMap::ENTER);
+        $picker = new Picker($terminal, new Style(false));
+
+        $picker->pick('Workspace', $this->workspaces());
+
+        $this->assertStringContainsString("? Workspace \u{203A} beta", $terminal->output());
+        $this->assertStringNotContainsString('filter:', $terminal->output());
+    }
+
+    public function testTheChosenItemCollapsesToASingleLine(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueTyping('beta');
+        $terminal->queueKeys(KeyMap::ENTER);
+        $picker = new Picker($terminal, new Style(false));
+
+        $picker->pick('Workspace', $this->workspaces());
+
+        // ラベル桁は Prompt と揃えて 12。
+        $this->assertStringContainsString(
+            "\u{2714} Workspace    \u{B7} beta-core-prod\r\n",
+            $terminal->output(),
+        );
+    }
+
+    public function testTheListStaysWhenTheAnsweredLineWouldNotFit(): void
+    {
+        // 折り返した行は clearLines() では消しきれない。畳めないと分かったら
+        // 出ているものをそのまま残す。FakeTerminal の幅は 80。
+        $long = str_repeat('w', 70);
+        $terminal = new FakeTerminal();
+        $terminal->queueKeys(KeyMap::ENTER);
+        $picker = new Picker($terminal, new Style(false));
+
+        $picker->pick('Workspace', ['ws-1' => $long]);
+
+        $this->assertStringNotContainsString("\u{2714} Workspace", $terminal->output());
     }
 }

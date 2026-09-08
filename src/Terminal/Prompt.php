@@ -4,6 +4,18 @@ namespace Tfcenv\Terminal;
 
 final class Prompt
 {
+    /** 回答済み行のラベル桁。全角を含むので mb_strwidth で揃える。 */
+    private const LABEL_WIDTH = 12;
+
+    /** 質問行で入力の直前に置く区切り */
+    private const PENDING_MARK = '›';
+
+    /** 回答済み行でラベルと値を分ける区切り */
+    private const ANSWER_MARK = '·';
+
+    /** hidden() の回答済み行に出す伏せ字。長さは値を漏らさないよう固定 */
+    private const MASK = '••••••••';
+
     public function __construct(
         private readonly Terminal $terminal,
         private readonly Style $style,
@@ -12,12 +24,19 @@ final class Prompt
 
     public function text(string $label, string $default = ''): string
     {
-        $suffix = $default === '' ? '' : ' ' . $this->style->dim('[' . $default . ']');
-        $this->terminal->write($this->style->accent('?') . ' ' . $label . $suffix . ' ');
+        $hint = $default === '' ? '' : ' ' . $this->style->dim('[' . $default . ']');
+        // ' [' + default + ']'
+        $hintWidth = $default === '' ? 0 : mb_strwidth($default) + 3;
 
-        $answer = trim($this->terminal->readLine());
+        $this->terminal->write($this->question($label, $hint));
 
-        return $answer === '' ? $default : $answer;
+        $typed = $this->terminal->readLine();
+        $answer = trim($typed);
+        $value = $answer === '' ? $default : $answer;
+
+        $this->collapse($label, $value, 1, $this->questionWidth($label, $hintWidth, mb_strwidth($typed)));
+
+        return $value;
     }
 
     /**
@@ -26,7 +45,7 @@ final class Prompt
      */
     public function hidden(string $label): string
     {
-        $this->terminal->write($this->style->accent('?') . ' ' . $label . ' ');
+        $this->terminal->write($this->question($label, ''));
         $this->terminal->enterRawMode();
 
         $value = '';
@@ -69,26 +88,39 @@ final class Prompt
 
         $this->terminal->write("\n");
 
+        // '*' はバイトごとに書いているので、エコー幅はバイト長と一致する。
+        $this->collapse($label, self::MASK, 1, $this->questionWidth($label, 0, strlen($value)));
+
         return $value;
     }
 
     public function confirm(string $label, bool $default = true): bool
     {
-        $hint = $default ? '[Y/n]' : '[y/N]';
+        $hintText = $default ? '[Y/n]' : '[y/N]';
+        $hint = ' ' . $this->style->dim($hintText);
 
         while (true) {
-            $this->terminal->write($this->style->accent('?') . ' ' . $label . ' ' . $this->style->dim($hint) . ' ');
-            $answer = strtolower(trim($this->terminal->readLine()));
+            $this->terminal->write($this->question($label, $hint));
+
+            $typed = $this->terminal->readLine();
+            $answer = strtolower(trim($typed));
+            $shown = $this->questionWidth($label, mb_strwidth($hintText) + 1, mb_strwidth($typed));
 
             if ($answer === '') {
+                $this->collapse($label, $default ? 'Yes' : 'No', 1, $shown);
+
                 return $default;
             }
 
             if ($answer === 'y' || $answer === 'yes') {
+                $this->collapse($label, 'Yes', 1, $shown);
+
                 return true;
             }
 
             if ($answer === 'n' || $answer === 'no') {
+                $this->collapse($label, 'No', 1, $shown);
+
                 return false;
             }
 
@@ -117,12 +149,14 @@ final class Prompt
             $cursor = (int) $defaultIndex;
         }
 
-        $this->terminal->write($this->style->accent('?') . ' ' . $label . "\n");
         $this->terminal->enterRawMode();
+        $renderedLines = 0;
 
         try {
             while (true) {
-                $this->renderOptions($options, $cursor);
+                $this->clearLines($renderedLines);
+                $renderedLines = $this->renderOptions($label, $options, $cursor);
+
                 $key = $this->terminal->readKey();
 
                 if ($key === KeyMap::CANCEL) {
@@ -130,7 +164,15 @@ final class Prompt
                 }
 
                 if ($key === KeyMap::ENTER || $key === KeyMap::EOF) {
-                    return $values[$cursor];
+                    $chosen = $values[$cursor];
+                    $this->collapse(
+                        $label,
+                        $options[$chosen],
+                        $renderedLines,
+                        $this->questionWidth($label, 0, mb_strwidth($options[$chosen])),
+                    );
+
+                    return $chosen;
                 }
 
                 if ($key === KeyMap::UP && $cursor > 0) {
@@ -140,8 +182,6 @@ final class Prompt
                 if ($key === KeyMap::DOWN && $cursor < count($values) - 1) {
                     $cursor++;
                 }
-
-                $this->clearLines(count($values));
             }
         } finally {
             $this->terminal->restoreMode();
@@ -149,18 +189,82 @@ final class Prompt
     }
 
     /**
+     * ラベル行と候補行をまとめて描く。ラベル行には今の選択を出すので、
+     * 入力は他のプロンプトと同じくラベルと同じ行に見える。
+     *
      * @param array<string,string> $options
+     * @return int 描いた行数
      */
-    private function renderOptions(array $options, int $cursor): void
+    private function renderOptions(string $label, array $options, int $cursor): int
     {
+        $values = array_keys($options);
+        $this->terminal->write($this->question($label, '') . $options[$values[$cursor]] . "\r\n");
+
         $index = 0;
 
         foreach ($options as $optionLabel) {
-            $marker = $index === $cursor ? $this->style->accent('>') : ' ';
+            $marker = $index === $cursor ? $this->style->accent('❯') : ' ';
             $text = $index === $cursor ? $this->style->bold($optionLabel) : $optionLabel;
             $this->terminal->write('  ' . $marker . ' ' . $text . "\r\n");
             $index++;
         }
+
+        return 1 + count($options);
+    }
+
+    /** 未回答の質問行。入力は必ずこの行の続きに来る。 */
+    private function question(string $label, string $hint): string
+    {
+        return $this->style->accent('?') . ' ' . $label . $hint . ' '
+            . $this->style->dim(self::PENDING_MARK) . ' ';
+    }
+
+    /** 質問行の表示幅。'? ' + ラベル + ヒント + ' > ' + 入力 */
+    private function questionWidth(string $label, int $hintWidth, int $inputWidth): int
+    {
+        return 2 + mb_strwidth($label) + $hintWidth + 3 + $inputWidth;
+    }
+
+    /** 回答済みの1行。ラベル桁は mb_strwidth で揃える（全角の説明があるため） */
+    private function answered(string $label, string $value): string
+    {
+        return $this->style->ok('✔') . ' ' . $this->padLabel($label) . ' '
+            . $this->style->dim(self::ANSWER_MARK) . ' ' . $value;
+    }
+
+    private function padLabel(string $label): string
+    {
+        $pad = self::LABEL_WIDTH - mb_strwidth($label);
+
+        return $pad > 0 ? $label . str_repeat(' ', $pad) : $label;
+    }
+
+    /**
+     * 画面に出ている質問 $lines 行を「✔ ラベル · 値」1行に畳む。
+     *
+     * cooked モードの入力は端末側がエコーするので、行が折り返していると
+     * 1行戻すだけでは足りず、消すと表示が壊れる。端末幅に収まるときだけ
+     * 畳み、収まらなければ出ているものをそのまま残す。TTY でなければ
+     * カーソル移動そのものが無意味なので何もしない。
+     */
+    private function collapse(string $label, string $value, int $lines, int $shownWidth): void
+    {
+        if ($lines < 1 || !$this->terminal->isTty()) {
+            return;
+        }
+
+        $width = $this->terminal->width();
+
+        if ($shownWidth > $width) {
+            return;
+        }
+
+        if (2 + mb_strwidth($this->padLabel($label)) + 3 + mb_strwidth($value) > $width) {
+            return;
+        }
+
+        $this->clearLines($lines);
+        $this->terminal->write($this->answered($label, $value) . "\r\n");
     }
 
     private function clearLines(int $count): void
