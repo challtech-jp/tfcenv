@@ -3628,6 +3628,28 @@ final class ApplierTest extends TestCase
         $this->applier($transport, $terminal)->apply($set);
 
         $this->assertStringNotContainsString('super-secret', $terminal->output());
+        // 何も書かない実装でも上のアサーションは通ってしまうので、
+        // 出力が実際に行われたことも確かめる。
+        $this->assertStringContainsString('0 succeeded, 1 failed', $terminal->output());
+    }
+
+    public function testItRedactsASensitiveValueEchoedBackInAnErrorMessage(): void
+    {
+        // TFC の errors[].detail が送った値を含んで返してきても漏らさない。
+        // 値だけを差し替えるので失敗理由は読めるままにする。
+        $transport = new FakeTransport();
+        $transport->queue(422, '{"errors":[{"detail":"the value \"super-secret\" is not allowed"}]}');
+        $terminal = new FakeTerminal();
+
+        $set = new ChangeSet('acme', new Workspace('ws-1', 'alpha-core-prod'), [
+            new Change(ChangeOp::Create, new Variable('k', 'super-secret', Category::Terraform, true, '')),
+        ]);
+
+        $this->applier($transport, $terminal)->apply($set);
+
+        $this->assertStringNotContainsString('super-secret', $terminal->output());
+        $this->assertStringContainsString('••••••••', $terminal->output());
+        $this->assertStringContainsString('is not allowed', $terminal->output());
     }
 
     public function testItReportsProgressPerVariable(): void
@@ -3846,6 +3868,7 @@ namespace Tfcenv\Cli;
 use Tfcenv\Terminal\Style;
 use Tfcenv\Terminal\Terminal;
 use Tfcenv\Tfc\TfcException;
+use Tfcenv\Tfc\Variable;
 use Tfcenv\Tfc\VariableRepository;
 
 final class Applier
@@ -3882,14 +3905,13 @@ final class Applier
                 ));
             } catch (TfcException $e) {
                 $failed++;
-                // 例外メッセージには value を載せていないのでそのまま出せる
                 $this->terminal->write(sprintf(
                     '  %s %s %s%s      %s%s',
                     $this->style->bad('✗'),
                     $change->op->value,
                     $change->variable->key,
                     "\n",
-                    $e->getMessage(),
+                    $this->redact($e->getMessage(), $change->variable),
                     "\n",
                 ));
             }
@@ -3898,6 +3920,21 @@ final class Applier
         $this->terminal->write(sprintf("\n%d succeeded, %d failed\n", $succeeded, $failed));
 
         return new ApplyResult($succeeded, $failed);
+    }
+
+    /**
+     * spec は「sensitive な値は確認画面・進捗表示・エラーのすべてでマスクする」と
+     * 定めている。TfcException のメッセージはサーバの errors[].detail をそのまま
+     * 載せるので、「メッセージに値は入らない」という前提に頼らず構造的に潰す。
+     * 差し替えるのは値そのものだけなので、失敗理由の診断情報は失われない。
+     */
+    private function redact(string $message, Variable $variable): string
+    {
+        if (!$variable->sensitive || $variable->value === '') {
+            return $message;
+        }
+
+        return str_replace($variable->value, '••••••••', $message);
     }
 }
 ```
