@@ -95,6 +95,16 @@ final class VariableTest extends TestCase
         $this->assertSame('GTM-XXXXXXX', $plain->displayValue());
     }
 
+    public function testDisplayValueMarksAnEmptyValueRatherThanMaskingIt(): void
+    {
+        $emptySecret = new Variable('k', '', Category::Terraform, true, '');
+        $emptyPlain = new Variable('k', '', Category::Terraform, false, '');
+
+        // 空をマスクしても隠すものが無く、8個の点は「8文字の秘密がある」と誤読させる
+        $this->assertSame('(empty)', $emptySecret->displayValue());
+        $this->assertSame('(empty)', $emptyPlain->displayValue());
+    }
+
     public function testWithValueAndWithIdReturnNewInstances(): void
     {
         $v = new Variable('k', 'v1', Category::Terraform, false, 'd');

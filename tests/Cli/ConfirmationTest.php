@@ -70,6 +70,20 @@ final class ConfirmationTest extends TestCase
         $this->assertFalse($this->confirmation($no)->ask($this->set()));
     }
 
+    public function testItShowsAnEmptyValueRatherThanBlankSpace(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueLine('n');
+        $set = new ChangeSet('acme', new Workspace('ws-1', 'alpha-core-prod'), [
+            new Change(ChangeOp::Update, new Variable('GTM_ID', '', Category::Terraform, false, 'live', 'var-9')),
+        ]);
+
+        $this->confirmation($terminal)->ask($set);
+
+        // 破壊的な更新が空白にしか見えないなら、確認画面の意味が無い
+        $this->assertStringContainsString('(empty)', $terminal->output());
+    }
+
     public function testAnEmptySetIsNotWorthAsking(): void
     {
         $terminal = new FakeTerminal();

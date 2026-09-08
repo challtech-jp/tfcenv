@@ -67,6 +67,13 @@ final class Variable
 
     public function displayValue(): string
     {
+        // 空の値をマスクしても隠すものが無く、•••••••• だと「8文字の秘密がある」と
+        // 誤読させる。確認画面は何が起きるかを見せるための画面なので、
+        // 破壊的な変更が空白にしか見えない状態を避ける。
+        if ($this->value === '') {
+            return '(empty)';
+        }
+
         return $this->sensitive ? self::MASK : $this->value;
     }
 
