@@ -90,6 +90,15 @@
             # conditionals, so the platform knowledge lives here.
             SHLIB_EXT = pkgs.stdenv.hostPlatform.extensions.sharedLibrary;
 
+            # nixpkgs ships PHP extensions as separate shared objects, listed
+            # by absolute path in the wrapper's php.ini. The `php` binary is a
+            # wrapper script that points PHP at that file, but an AOT-compiled
+            # binary embeds libphp directly and so starts with *no* extensions
+            # - curl_init() is simply undefined. Pointing the ini scan dir at
+            # the wrapper's lib/ restores them, for `./tfcenv` as well as for
+            # `php`.
+            PHP_INI_SCAN_DIR = "${php}/lib";
+
             shellHook = ''
               export COMPOSER_CACHE_DIR="''${COMPOSER_CACHE_DIR:-$PWD/.composer-cache}"
               # PHPX ships as a composer dependency of swoole/typephp and is

@@ -1,0 +1,1131 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tfcenv インタラクティブ CLI 設計 (P1)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@600;700&display=swap">
+<style>
+  :root {
+    color-scheme: light dark;
+
+    --ground:  #FBFAFC;
+    --surface: #FFFFFF;
+    --sunken:  #F4F1F7;
+    --ink:     #1A1721;
+    --muted:   #6B6577;
+    --faint:   #8F8899;
+    --rule:    #E5E1EB;
+    --rule-hi: #CFC7DB;
+    --accent:  #6B3FA0;
+    --accent-soft: #F0E9F8;
+    --ok:      #1F7A4D;
+    --ok-soft: #E4F2EA;
+    --no:      #B03A48;
+    --no-soft: #FAE8EA;
+    --warn:    #8A5A10;
+    --warn-soft: #F8EFDD;
+
+    --display: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;
+    --body: "Zen Kaku Gothic New", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    --measure: 84ch;
+    --rail: 244px;
+    --shell: 1660px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:  #15131A;
+      --surface: #1D1A24;
+      --sunken:  #221E2B;
+      --ink:     #EDE9F2;
+      --muted:   #9A93A8;
+      --faint:   #7C7489;
+      --rule:    #2F2A39;
+      --rule-hi: #443C52;
+      --accent:  #B492E8;
+      --accent-soft: #2A2136;
+      --ok:      #5CC48D;
+      --ok-soft: #17301F;
+      --no:      #E88A94;
+      --no-soft: #331A1F;
+      --warn:    #DFAE5A;
+      --warn-soft: #302510;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:  #15131A;
+    --surface: #1D1A24;
+    --sunken:  #221E2B;
+    --ink:     #EDE9F2;
+    --muted:   #9A93A8;
+    --faint:   #7C7489;
+    --rule:    #2F2A39;
+    --rule-hi: #443C52;
+    --accent:  #B492E8;
+    --accent-soft: #2A2136;
+    --ok:      #5CC48D;
+    --ok-soft: #17301F;
+    --no:      #E88A94;
+    --no-soft: #331A1F;
+    --warn:    #DFAE5A;
+    --warn-soft: #302510;
+  }
+
+  * { box-sizing: border-box; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.85;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  /* ---------- shell ---------- */
+
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    max-width: var(--shell);
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  @media (min-width: 1040px) {
+    .shell {
+      grid-template-columns: var(--rail) minmax(0, 1fr);
+      column-gap: 64px;
+      padding: 0 44px 120px;
+    }
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 60px 0 34px;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    gap: 26px 72px;
+  }
+  @media (min-width: 1100px) {
+    .masthead {
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+      align-items: end;
+    }
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+
+  .masthead h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(30px, 4.4vw, 46px);
+    line-height: 1.22;
+    letter-spacing: 0.01em;
+    text-wrap: balance;
+    margin: 0 0 18px;
+  }
+
+  .standfirst {
+    max-width: var(--measure);
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .docmeta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    border-left: 1px solid var(--rule);
+    padding-left: 24px;
+  }
+  .docmeta b {
+    display: block;
+    color: var(--faint);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-size: 9.5px;
+    line-height: 1.6;
+  }
+  .docmeta span { line-height: 1.55; word-break: break-all; }
+
+  /* ---------- rail ---------- */
+
+  .rail { padding: 30px 0; }
+
+  @media (min-width: 1040px) {
+    .rail {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      max-height: 100vh;
+      overflow-y: auto;
+      padding: 44px 0;
+    }
+  }
+
+  .rail h2 {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 14px;
+  }
+
+  .rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 18px;
+  }
+  @media (min-width: 1040px) {
+    .rail ol { flex-direction: column; flex-wrap: nowrap; gap: 1px; }
+  }
+
+  .rail a {
+    display: block;
+    padding: 5px 0 5px 11px;
+    border-left: 2px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 13.5px;
+    line-height: 1.5;
+    transition: color 120ms, border-color 120ms;
+  }
+  .rail a:hover { color: var(--ink); }
+  .rail a.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* ---------- article ---------- */
+
+  article { padding-top: 30px; min-width: 0; }
+  @media (min-width: 1040px) { article { padding-top: 44px; } }
+
+  section { padding: 10px 0 48px; }
+
+  section > h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 25px;
+    line-height: 1.4;
+    margin: 0 0 4px;
+    text-wrap: balance;
+  }
+  section > h2::before {
+    content: "";
+    display: block;
+    width: 34px;
+    height: 2px;
+    background: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  h3 {
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+    margin: 34px 0 2px;
+  }
+
+  p { max-width: var(--measure); margin: 0 0 16px; }
+  article ul { max-width: var(--measure); padding-left: 1.3em; margin: 0 0 16px; }
+  article li { margin-bottom: 8px; }
+  article li::marker { color: var(--rule-hi); }
+
+  strong { font-weight: 700; }
+  a { color: var(--accent); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+    word-break: break-word;
+  }
+
+  /* wide lists: use the horizontal space instead of a lone narrow ribbon */
+  @media (min-width: 1240px) {
+    article ul.cols {
+      max-width: none;
+      columns: 2;
+      column-gap: 64px;
+      column-rule: 1px solid var(--rule);
+    }
+    article ul.cols li { break-inside: avoid; }
+  }
+
+  .scroller { overflow-x: auto; margin: 0 0 22px; }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.78;
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 20px 24px;
+    margin: 0;
+    min-width: max-content;
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; }
+
+  /* ---------- tables ---------- */
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 620px;
+    font-size: 13.5px;
+    line-height: 1.68;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 24px 10px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-bottom-color: var(--rule-hi);
+    white-space: nowrap;
+  }
+  td:last-child, th:last-child { padding-right: 0; }
+  td.nowrap code { white-space: nowrap; }
+
+  /* ---------- state pills ---------- */
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .pill-ok   { color: var(--ok);    background: var(--ok-soft);   border-color: var(--ok); }
+  .pill-no   { color: var(--no);    background: var(--no-soft);   border-color: var(--no); }
+  .pill-warn { color: var(--warn);  background: var(--warn-soft); border-color: var(--warn); }
+  .pill-off  { color: var(--muted); background: var(--sunken);    border-color: var(--rule-hi); }
+
+  /* ---------- phase strip ---------- */
+
+  .phases {
+    display: grid;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0 0 26px;
+  }
+  @media (min-width: 720px) { .phases { grid-template-columns: repeat(3, 1fr); } }
+  .phase {
+    background: var(--surface);
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .phase.now { background: var(--accent-soft); }
+  .phase-id {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+  .phase-name { font-weight: 500; line-height: 1.5; }
+  .phase-note { font-size: 12.5px; color: var(--muted); line-height: 1.65; margin-top: auto; }
+
+  /* ---------- notes: label in its own column so they read wide ---------- */
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    padding: 18px 24px;
+    margin: 0 0 22px;
+    font-size: 14px;
+    display: grid;
+    gap: 8px 32px;
+  }
+  @media (min-width: 900px) {
+    .note { grid-template-columns: 132px minmax(0, 1fr); }
+    .note .note-label { padding-top: 2px; }
+  }
+  .note-body { max-width: 78ch; }
+  .note-body p { max-width: none; }
+  .note-body p:last-child { margin-bottom: 0; }
+  .note-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* ---------- figure: caption beside the drawing when there is room ---------- */
+
+  figure { margin: 0 0 30px; display: grid; gap: 16px 44px; }
+  @media (min-width: 1280px) {
+    figure { grid-template-columns: minmax(0, 820px) minmax(240px, 1fr); align-items: start; }
+  }
+  figure .scroller { margin-bottom: 0; }
+  figure svg {
+    display: block;
+    width: 100%;
+    max-width: 820px;
+    height: auto;
+    min-width: 640px;
+    color: var(--ink);
+  }
+  figcaption {
+    font-size: 12.5px;
+    line-height: 1.75;
+    color: var(--muted);
+    max-width: 60ch;
+  }
+  em { color: var(--accent); font-style: normal; font-weight: 500; }
+
+  svg .box { fill: var(--surface); stroke: currentColor; stroke-width: 1.25; }
+  svg .box-hl { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+  svg .flow { stroke: currentColor; stroke-width: 1.25; fill: none; }
+  svg .flow-hl { stroke: var(--accent); stroke-width: 1.5; fill: none; }
+  svg .lbl { fill: currentColor; font-family: var(--mono); font-size: 12px; }
+  svg .lbl-sm { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+  svg .lbl-edge { fill: var(--muted); font-family: var(--mono); font-size: 10.5px; }
+  svg .lbl-hl { fill: var(--accent); font-family: var(--mono); font-size: 10.5px; font-weight: 500; }
+  svg .exit { fill: currentColor; font-family: var(--mono); font-size: 11px; }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--rule);
+    padding-top: 26px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--faint);
+    line-height: 1.8;
+  }
+
+  html { scroll-behavior: smooth; }
+  section { scroll-margin-top: 24px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <header class="masthead">
+    <div>
+      <p class="eyebrow">Design spec &middot; P1</p>
+      <h1>tfcenv インタラクティブ CLI 設計</h1>
+      <p class="standfirst">
+        Terraform Cloud のワークスペース変数を Web コンソールではなく CLI から登録する。
+        PHP で書き、TypePHP でネイティブバイナリに AOT コンパイルする。
+        本書は対話モード（P1）の設計と、実装前にスパイクで確定させた技術的事実を記録する。
+      </p>
+    </div>
+    <div class="docmeta">
+      <span><b>日付</b>2026-09-08</span>
+      <span><b>状態</b>承認済み</span>
+      <span><b>Markdown 版</b>2026-09-08-tfcenv-interactive-cli-design.md</span>
+    </div>
+  </header>
+
+  <nav class="rail" aria-label="目次">
+    <h2>目次</h2>
+    <ol>
+      <li><a href="#background">背景</a></li>
+      <li><a href="#scope">スコープの分解</a></li>
+      <li><a href="#facts">検証済みの技術的事実</a></li>
+      <li><a href="#command">コマンド</a></li>
+      <li><a href="#env">環境変数</a></li>
+      <li><a href="#api">使用する TFC API</a></li>
+      <li><a href="#flow">フロー</a></li>
+      <li><a href="#ir">中間表現</a></li>
+      <li><a href="#modules">モジュール構成</a></li>
+      <li><a href="#typephp">TypePHP 制約の反映</a></li>
+      <li><a href="#errors">エラーと安全性</a></li>
+      <li><a href="#tests">テスト戦略</a></li>
+      <li><a href="#p3">P3 への引き渡し</a></li>
+    </ol>
+  </nav>
+
+  <article>
+
+    <section id="background">
+      <h2>背景</h2>
+      <p>
+        Terraform Cloud のワークスペース変数は Web コンソールからしか登録できない。
+        <code>acme-terraform</code> の PR では
+        「変数を追加する PR を出す前に TFC 側へ値を入れておかないと <code>plan</code> が落ちる」
+        という段取りが繰り返し発生していて（T-026 / T-057）、
+        そのたびにブラウザでワークスペースを開いて手入力している。
+      </p>
+      <p><code>tfcenv</code> はこの登録作業を CLI に移す。</p>
+    </section>
+
+    <section id="scope">
+      <h2>スコープの分解</h2>
+      <p>全体は3つのサブプロジェクトに分かれる。本書は <strong>P1 のみ</strong>を扱う。</p>
+
+      <div class="phases">
+        <div class="phase now">
+          <span class="phase-id">P1</span>
+          <span class="phase-name">インタラクティブモード</span>
+          <span class="phase-note">本書</span>
+        </div>
+        <div class="phase">
+          <span class="phase-id">P2</span>
+          <span class="phase-name">JSON 入力モード</span>
+          <span class="phase-note">未着手。P1 の中間表現を再利用する</span>
+        </div>
+        <div class="phase">
+          <span class="phase-id">P3</span>
+          <span class="phase-name">静的バイナリ配布</span>
+          <span class="phase-note">未着手。macOS arm64 / Linux x86_64 + CI。PHP ソースには触らない</span>
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="note-label">順序の根拠</span>
+        <div class="note-body">
+          <p>
+            P1 → P2 → P3 の順で進める。P3 が PHP ソースを一切変更しないため、
+            また TypePHP の制約を守って書いたソースは phpmicro / PHAR でもそのまま使えるため、
+            P1 を先に片付けても手戻りが出ない。
+          </p>
+        </div>
+      </div>
+
+      <h3>非目標（P1）</h3>
+      <ul class="cols">
+        <li>JSON / YAML などのファイル入力（P2）</li>
+        <li>静的リンクによる自己完結バイナリ（P3）</li>
+        <li>変数の一覧表示・削除</li>
+        <li>Variable Set（ワークスペース変数のみ扱う）</li>
+        <li>複数ワークスペースへの同時登録</li>
+        <li><code>hcl: true</code> の変数（リスト・マップ値）。<code>hcl</code> 属性は送らず API のデフォルトに任せる</li>
+        <li>Terraform Enterprise（self-hosted）対応。ただし API のベース URL は <code>Tfc\Client</code> のコンストラクタ引数にしておき、深い場所にハードコードはしない</li>
+      </ul>
+    </section>
+
+    <section id="facts">
+      <h2>検証済みの技術的事実</h2>
+      <p>
+        実装前にスパイクで確定させた事実。再調査を避けるため記録する。
+        「条件つき」は、使えるが前提や書き方に縛りがあるもの。
+      </p>
+
+      <div class="scroller">
+        <table>
+          <colgroup>
+            <col style="width: 26%">
+            <col style="width: 104px">
+            <col>
+          </colgroup>
+          <thead>
+            <tr><th>項目</th><th>判定</th><th>内容</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>json_encode</code> / <code>json_decode</code> / <code>getenv</code></td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>AOT バイナリで組み込みで動く</td>
+            </tr>
+            <tr>
+              <td><code>curl_*</code></td>
+              <td><span class="pill pill-warn">条件つき</span></td>
+              <td><code>PHP_INI_SCAN_DIR</code> が必要。nixpkgs は拡張を共有 <code>.so</code> で配り絶対パスを <code>php.ini</code> に列挙するが、AOT バイナリは libphp を直接埋め込むため拡張ゼロで起動する。指定すれば動作し、<code>app.terraform.io/api/v2/ping</code> に到達して 204 を得た</td>
+            </tr>
+            <tr>
+              <td><code>curl_close()</code></td>
+              <td><span class="pill pill-off">使わない</span></td>
+              <td>PHP 8.5 で deprecated</td>
+            </tr>
+            <tr>
+              <td><code>shell_exec</code> / <code>exec</code> / <code>proc_open</code> / <code>fread</code> / <code>fgets</code> / <code>stream_set_blocking</code> / <code>stream_isatty</code></td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>すべて core</td>
+            </tr>
+            <tr>
+              <td><code>readline</code> / <code>posix_isatty</code></td>
+              <td><span class="pill pill-no">使えない</span></td>
+              <td>拡張のため未定義。<code>stream_isatty</code> で代替する</td>
+            </tr>
+            <tr>
+              <td><code>stty raw -echo</code> + <code>fread(STDIN, 1)</code></td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td><code>stty -g</code> で退避し、pty 上で生キー読み取りを確認済み</td>
+            </tr>
+            <tr>
+              <td>ANSI エスケープ</td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>色・太字とも出力できる</td>
+            </tr>
+            <tr>
+              <td><code>interface</code> / <code>trait</code></td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>&mdash;</td>
+            </tr>
+            <tr>
+              <td><code>enum</code></td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>backed 値・メソッド・<code>match</code>・<code>from()</code>・<code>-&gt;name</code> すべて</td>
+            </tr>
+            <tr>
+              <td><code>readonly</code> promoted プロパティ</td>
+              <td><span class="pill pill-warn">条件つき</span></td>
+              <td>可視性の明示が必須。PHP 8.5 の暗黙 public 形式 <code>final string $x</code> は受け付けられない</td>
+            </tr>
+            <tr>
+              <td><code>extends \Exception</code></td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td><code>getMessage()</code> / <code>getCode()</code> も保持される。wiki が指摘していた「internal クラス継承禁止」との矛盾は、こちら（継承できる）が正しい</td>
+            </tr>
+            <tr>
+              <td><code>RuntimeException</code> などの組み込み例外</td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>&mdash;</td>
+            </tr>
+            <tr>
+              <td><code>static fn</code> / <code>array_map</code> / 配列関数</td>
+              <td><span class="pill pill-ok">動く</span></td>
+              <td>&mdash;</td>
+            </tr>
+            <tr>
+              <td><code>main()</code> の名前空間</td>
+              <td><span class="pill pill-warn">条件つき</span></td>
+              <td>グローバル必須。名前空間内に書くと <code>Ns\main()</code> 扱いで「<code>main()</code> が定義されていない」と拒否される</td>
+            </tr>
+            <tr>
+              <td><code>tpc --full-static</code></td>
+              <td><span class="pill pill-off">使わない</span></td>
+              <td><code>getFullStaticTargetTriple()</code> が <code>&lt;arch&gt;-unknown-linux-musl</code> をハードコードしており常に Linux/musl 出力になる。さらに必須の SDK（<code>phpx/full-static/sdk</code>）が composer 配布物に含まれない</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="command">
+      <h2>コマンド</h2>
+      <p>P1 では <code>add</code> の1つだけ。</p>
+      <div class="scroller">
+<pre><code>tfcenv add        ワークスペース変数を対話的に登録する
+tfcenv --help
+tfcenv --version</code></pre>
+      </div>
+      <p>
+        サブコマンド構造にしておくことで、P2 で <code>tfcenv apply -f vars.json</code> を素直に足せる。
+        終了コードは成功 <code>0</code> / 失敗 <code>1</code>。
+        <code>main()</code> は <code>void</code> 固定なので <code>exit(1)</code> で返す。
+      </p>
+    </section>
+
+    <section id="env">
+      <h2>環境変数</h2>
+      <div class="scroller">
+        <table>
+          <colgroup><col style="width: 200px"><col style="width: 104px"><col></colgroup>
+          <thead><tr><th>変数</th><th>必須</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td class="nowrap"><code>TFC_TOKEN</code></td><td><span class="pill pill-no">必須</span></td><td>API トークン。これ以外の取得元は持たない</td></tr>
+            <tr><td class="nowrap"><code>TFC_ORG</code></td><td><span class="pill pill-off">任意</span></td><td>organization 入力のデフォルト値</td></tr>
+            <tr><td class="nowrap"><code>NO_COLOR</code></td><td><span class="pill pill-off">任意</span></td><td>設定されていれば ANSI 出力を無効化</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <code>TFC_TOKEN</code> が未設定なら、トークン発行ページ
+        （<code>https://app.terraform.io/app/settings/tokens</code>）を案内して <code>exit(1)</code>。
+      </p>
+    </section>
+
+    <section id="api">
+      <h2>使用する Terraform Cloud API</h2>
+      <p>
+        すべて <code>application/vnd.api+json</code>、<code>Authorization: Bearer $TFC_TOKEN</code>。
+        ベース URL は <code>https://app.terraform.io/api/v2</code>。
+      </p>
+      <div class="scroller">
+        <table>
+          <colgroup><col style="width: 220px"><col></colgroup>
+          <thead><tr><th>目的</th><th>エンドポイント</th></tr></thead>
+          <tbody>
+            <tr><td>ワークスペース一覧</td><td class="nowrap"><code>GET /organizations/:org/workspaces?page[size]=100&amp;page[number]=N</code></td></tr>
+            <tr><td>既存変数の一覧</td><td class="nowrap"><code>GET /workspaces/:ws_id/vars</code></td></tr>
+            <tr><td>変数の作成</td><td class="nowrap"><code>POST /workspaces/:ws_id/vars</code></td></tr>
+            <tr><td>変数の更新</td><td class="nowrap"><code>PATCH /workspaces/:ws_id/vars/:var_id</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        ページングは <code>meta.pagination.next-page</code> が <code>null</code> になるまで辿る。
+        TFC のデフォルトページサイズは 20、最大 100。
+        ワークスペース ID は一覧のレスポンスに含まれるので、名前から ID を引くための追加リクエストは行わない。
+      </p>
+      <div class="note">
+        <span class="note-label">読み戻せない値</span>
+        <div class="note-body">
+          <p>
+            <code>sensitive: true</code> の変数は API から値を読み戻せない。
+            そのため衝突時に見せられるのはメタデータ（category / sensitive / description）だけで、
+            現在値は表示できない。
+          </p>
+        </div>
+      </div>
+
+      <div class="note">
+        <span class="note-label">実装時に確認</span>
+        <div class="note-body">
+          <p>
+            <strong><code>sensitive: true</code> の変数を <code>PATCH</code> で
+            <code>false</code> に戻せるかは未検証。</strong>
+            トークンがないため確認できていない。戻せない場合は 422 が返るので、
+            既存のエラー経路で「TFC では sensitive を解除できない」と伝える。
+            <em>Update the value and attributes</em> で sensitive を Yes → No に
+            したときに通る経路なので、実装時に実物で確かめる。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <h2>フロー</h2>
+
+      <h3>起動から選択まで</h3>
+      <div class="scroller">
+<pre><code>1. TFC_TOKEN 確認              未設定 → 発行URL を案内して exit(1)
+2. stream_isatty(STDIN)        非TTY → 「対話モードは TTY が必要」と伝えて exit(1)
+3. organization                TFC_ORG があればデフォルト値、なければ入力
+4. ワークスペース一覧を取得     ページングを辿る → 絞り込みピッカーで選択
+5. 既存変数の一覧を取得         衝突判定用に key =&gt; Variable で保持</code></pre>
+      </div>
+
+      <h3>変数ループから終了まで</h3>
+
+      <figure>
+        <div class="scroller">
+          <svg viewBox="0 0 790 660" role="img" aria-label="変数ループの制御フロー。key 入力のあと既存変数と衝突するかで分岐し、衝突時は value のみ更新・属性も更新・スキップ・キー変更の4つに分かれる。ループを抜けると確認画面があり、No なら何も送らず exit 0。適用は1件ずつ行い失敗しても継続し、集計で失敗があれば exit 1 を返す。">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+                <polygon points="0,0 10,4 0,8" fill="currentColor"></polygon>
+              </marker>
+              <marker id="ar-hl" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+                <polygon points="0,0 10,4 0,8" fill="var(--accent)"></polygon>
+              </marker>
+            </defs>
+
+            <rect class="box" x="120" y="54"  width="220" height="42" rx="5"></rect>
+            <text class="lbl" x="230" y="80"  text-anchor="middle">key 入力</text>
+
+            <rect class="box" x="120" y="130" width="220" height="42" rx="5"></rect>
+            <text class="lbl" x="230" y="156" text-anchor="middle">既存にある?</text>
+
+            <rect class="box" x="120" y="226" width="220" height="58" rx="5"></rect>
+            <text class="lbl"    x="230" y="248" text-anchor="middle">新規 &mdash; 属性を入力</text>
+            <text class="lbl-sm" x="230" y="268" text-anchor="middle">category / sensitive / value / description</text>
+
+            <rect class="box" x="120" y="336" width="220" height="42" rx="5"></rect>
+            <text class="lbl" x="230" y="362" text-anchor="middle">もう1件追加?</text>
+
+            <rect class="box" x="120" y="412" width="220" height="42" rx="5"></rect>
+            <text class="lbl" x="230" y="438" text-anchor="middle">確認画面</text>
+
+            <rect class="box" x="120" y="488" width="220" height="58" rx="5"></rect>
+            <text class="lbl"    x="230" y="510" text-anchor="middle">適用</text>
+            <text class="lbl-sm" x="230" y="530" text-anchor="middle">1件ずつ POST / PATCH・失敗しても継続</text>
+
+            <rect class="box" x="120" y="598" width="220" height="42" rx="5"></rect>
+            <text class="lbl" x="230" y="624" text-anchor="middle">集計</text>
+
+            <rect class="box-hl" x="400" y="130" width="360" height="42" rx="5"></rect>
+            <text class="lbl" x="580" y="156" text-anchor="middle">衝突時の選択</text>
+
+            <rect class="box-hl" x="400" y="214" width="160" height="56" rx="5"></rect>
+            <text class="lbl"    x="480" y="236" text-anchor="middle">value のみ更新</text>
+            <text class="lbl-sm" x="480" y="255" text-anchor="middle">他は既存を保持</text>
+
+            <rect class="box-hl" x="600" y="214" width="160" height="56" rx="5"></rect>
+            <text class="lbl"    x="680" y="236" text-anchor="middle">属性も順に聞く</text>
+            <text class="lbl-sm" x="680" y="255" text-anchor="middle">既存値がデフォルト</text>
+
+            <line class="flow" x1="230" y1="96"  x2="230" y2="126" marker-end="url(#ar)"></line>
+            <line class="flow" x1="230" y1="172" x2="230" y2="222" marker-end="url(#ar)"></line>
+            <text class="lbl-edge" x="238" y="203">いいえ</text>
+
+            <line class="flow" x1="230" y1="284" x2="230" y2="332" marker-end="url(#ar)"></line>
+            <line class="flow" x1="230" y1="378" x2="230" y2="408" marker-end="url(#ar)"></line>
+            <text class="lbl-edge" x="238" y="399">No</text>
+
+            <line class="flow" x1="230" y1="454" x2="230" y2="484" marker-end="url(#ar)"></line>
+            <text class="lbl-edge" x="238" y="475">Yes</text>
+
+            <line class="flow" x1="230" y1="546" x2="230" y2="594" marker-end="url(#ar)"></line>
+
+            <line class="flow-hl" x1="340" y1="151" x2="396" y2="151" marker-end="url(#ar-hl)"></line>
+            <text class="lbl-hl" x="368" y="143" text-anchor="middle">はい</text>
+
+            <line class="flow-hl" x1="480" y1="172" x2="480" y2="210" marker-end="url(#ar-hl)"></line>
+            <text class="lbl-hl" x="488" y="196">value</text>
+
+            <line class="flow-hl" x1="680" y1="172" x2="680" y2="210" marker-end="url(#ar-hl)"></line>
+            <text class="lbl-hl" x="688" y="196">+ attrs</text>
+
+            <polyline class="flow-hl" points="480,270 480,348 344,348" marker-end="url(#ar-hl)"></polyline>
+
+            <polyline class="flow-hl" points="580,172 580,358 344,358" marker-end="url(#ar-hl)"></polyline>
+            <text class="lbl-hl" x="588" y="300">Skip</text>
+
+            <polyline class="flow-hl" points="680,270 680,368 344,368" marker-end="url(#ar-hl)"></polyline>
+
+            <polyline class="flow-hl" points="580,130 580,22 230,22 230,50" marker-end="url(#ar-hl)"></polyline>
+            <text class="lbl-hl" x="400" y="15" text-anchor="middle">Use a different key</text>
+
+            <polyline class="flow" points="120,357 78,357 78,75 116,75" marker-end="url(#ar)"></polyline>
+            <text class="lbl-edge" x="70" y="219" text-anchor="end">Yes</text>
+
+            <line class="flow" x1="340" y1="433" x2="418" y2="433" marker-end="url(#ar)"></line>
+            <text class="lbl-edge" x="352" y="425">No</text>
+            <text class="exit" x="426" y="437">何も送らず exit 0</text>
+
+            <line class="flow" x1="340" y1="619" x2="402" y2="619" marker-end="url(#ar)"></line>
+            <text class="exit" x="410" y="613">失敗 0 件 &rarr; exit 0</text>
+            <text class="exit" x="410" y="633">失敗あり &rarr; exit 1</text>
+          </svg>
+        </div>
+        <figcaption>
+          紫で描いた経路が、散文からは読み取りにくい部分。既存キーとの衝突は4つに分岐する。
+          <em>Update the value</em> は value だけを聞き直して合流。
+          <em>Update the value and attributes</em> は category / sensitive / description にも
+          既存の値をデフォルトとして置いて順に聞く。
+          <em>Skip this variable</em> はバッチから外れて合流。
+          <em>Use a different key</em> は key 入力へ戻って再び衝突判定を受ける。
+          確認画面で No を選ぶと1件も送信せずに終了する。
+        </figcaption>
+      </figure>
+
+      <p>
+        再実行しても安全である。手順 5 で既存変数を取り直すため、
+        前回の部分失敗のあとに同じ操作を繰り返しても衝突として正しく検出される。
+      </p>
+
+      <h3>入力順序についての注記</h3>
+      <p>
+        <code>sensitive</code> を <code>value</code> より先に聞く。
+        ブレスト時のモックアップは <code>value</code> → <code>category</code> → <code>sensitive</code>
+        の順だったが、それでは「まだ聞いていない <code>sensitive</code> の値に基づいて
+        <code>value</code> の入力を非表示にする」という不可能な順序になるため、
+        実装可能な順序に入れ替えた。
+      </p>
+      <p>
+        非 sensitive な値をわざわざ隠すのはタイプミスの確認ができず不便なので、
+        「常に非表示にする」という解決は採らない。
+      </p>
+      <h3>衝突時の更新は2段構え</h3>
+      <p>
+        既定の <em>Update the value</em> は <code>value</code> だけを聞き直し、
+        <code>category</code> / <code>sensitive</code> / <code>description</code> は
+        既存の値を保持する。「値を差し替えたいだけ」という一番多いケースを
+        1キーで済ませるため。
+      </p>
+      <p>
+        属性も変えたいときは <em>Update the value and attributes</em> を選ぶ。
+        この経路では <code>category</code> / <code>sensitive</code> /
+        <code>description</code> に既存の値がデフォルトとして入っていて、
+        Enter でそのまま維持できる。<code>value</code> だけは API から読み戻せないため
+        デフォルトを置けず、常に入力が必要になる。
+      </p>
+
+      <h3>ピッカーのキー割り当て</h3>
+      <div class="scroller">
+        <table>
+          <colgroup><col style="width: 320px"><col></colgroup>
+          <thead><tr><th>キー</th><th>動作</th></tr></thead>
+          <tbody>
+            <tr><td>印字可能文字</td><td>絞り込み文字列に追加</td></tr>
+            <tr><td>Backspace</td><td>絞り込み文字列から1文字削除</td></tr>
+            <tr><td>&uarr; / &darr;、<code>Ctrl-P</code> / <code>Ctrl-N</code></td><td>候補の選択移動</td></tr>
+            <tr><td>Enter</td><td>選択を確定</td></tr>
+            <tr><td><code>Ctrl-C</code></td><td>端末を復元して <code>exit(1)</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        矢印キーは <code>ESC [ A</code> / <code>ESC [ B</code> の3バイト列として届くため、
+        <code>ESC</code> を読んだら続きを読んでシーケンスとして解釈する。
+      </p>
+    </section>
+
+    <section id="ir">
+      <h2>中間表現</h2>
+      <p>
+        対話で組み立てるデータは次の形にする。これは P2 の JSON スキーマとそのまま同じ形であり、
+        P2 は「JSON からこの構造を作る入力アダプタ」を足すだけで済む。
+      </p>
+      <div class="scroller">
+<pre><code>organization: string
+workspace:    string            (名前。ID は実行時に解決する)
+variables:    [
+  {
+    key:         string
+    value:       string
+    category:    "terraform" | "env"
+    sensitive:   bool
+    description: string          (空文字列可)
+  },
+  ...
+]</code></pre>
+      </div>
+      <p>
+        <code>AddCommand</code> の責務は「対話でこの構造を作る」ことだけに限る。
+        確認画面と適用処理は入力方法に依存しない共通コンポーネントに置く。
+      </p>
+    </section>
+
+    <section id="modules">
+      <h2>モジュール構成</h2>
+      <div class="scroller">
+<pre><code>src/
+  main.php                       グローバル main(int $argc, array $argv): void。薄く保つ
+  Cli/Application.php            引数解析・コマンド振り分け・トップレベルの例外境界
+  Cli/AddCommand.php             フローの手順書
+  Terminal/Terminal.php          stty の退避と復元・生キー読み取り・TTY 判定
+  Terminal/Prompt.php            text / password / confirm / select
+  Terminal/Picker.php            絞り込み付きリスト選択
+  Terminal/Style.php             ANSI。NO_COLOR と非TTY で自動的に無効化
+  Tfc/HttpTransport.php          interface。テストで差し替える境界
+  Tfc/CurlTransport.php          curl による実装
+  Tfc/Client.php                 JSON:API の組み立てとエラー整形
+  Tfc/WorkspaceRepository.php    一覧取得・名前から ID の解決
+  Tfc/VariableRepository.php     一覧取得・create・update
+  Tfc/Variable.php               値オブジェクト
+  Tfc/Category.php               enum terraform | env
+  Tfc/TfcException.php           extends \Exception。HTTP ステータスと detail を保持
+tests/                           PHPUnit。project.yml の sources は src のみなので AOT 対象外</code></pre>
+      </div>
+      <div class="note">
+        <span class="note-label">設計の要点</span>
+        <div class="note-body">
+          <p>
+            <code>HttpTransport</code> と <code>Terminal</code> をインタフェースにしていること。
+            この2つを差し替えれば対話フロー全体をテストから駆動できる。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="typephp">
+      <h2>TypePHP 制約の反映</h2>
+      <p>検証済みの事実に加えて、コードスタイルに落とす規則。</p>
+      <ul class="cols">
+        <li><code>main()</code> は <code>src/main.php</code> にグローバル名前空間で置く。クラスは名前空間付きの別ファイルに書く</li>
+        <li>
+          <strong><code>toArray()</code> / <code>toString()</code> / <code>toInt()</code> /
+          <code>toAny()</code> / <code>toRef()</code> をメソッド名に使わない。</strong>
+          TypePHP はこれらを予約キーワードメソッドとして通常のメソッドより先に解決するため、
+          同名メソッドは意図した意味で呼ばれない。DTO の変換は <code>toPayload()</code> などにする
+        </li>
+        <li>
+          <code>switch</code> を使わず <code>match</code> を使う。非 <code>int</code>/<code>bool</code> の
+          <code>switch</code> は全 case を <code>return</code> / <code>break</code> /
+          <code>continue</code> / <code>exit</code> / <code>throw</code> で明示終端する必要があるため
+        </li>
+        <li>コンストラクタ promotion は可視性を明示する（<code>private readonly string $x</code>）</li>
+        <li><code>declare(strict_types=1)</code> は書かない。TypePHP は常に strict なので冗長</li>
+        <li>グローバルスコープに実行文を書かない（宣言・<code>use</code>・<code>declare</code>・定数定義のみ）</li>
+        <li>全ソースファイルを UTF-8 にする</li>
+        <li>バージョン番号はグローバル定数ではなくクラス定数で持つ</li>
+      </ul>
+    </section>
+
+    <section id="errors">
+      <h2>エラーハンドリングと安全性</h2>
+      <ul class="cols">
+        <li>
+          <code>TfcException</code> に HTTP ステータスと JSON:API の <code>errors[].detail</code> を載せる。
+          <code>Application</code> がトップレベルで catch し、1行のメッセージを出して <code>exit(1)</code>
+        </li>
+        <li>
+          curl のネットワークエラー（名前解決失敗・タイムアウト等）も
+          <code>TfcException</code> に正規化して同じ経路に流す
+        </li>
+        <li>
+          <strong><code>TFC_TOKEN</code> の値を出力しない。</strong>
+          エラーメッセージ・デバッグ出力・例外のいずれにも載せない
+        </li>
+        <li>
+          <code>sensitive: true</code> の値は確認画面・進捗表示・エラーのすべてでマスクする
+        </li>
+      </ul>
+
+      <div class="note">
+        <span class="note-label">Ctrl-C 対策</span>
+        <div class="note-body">
+          <p>
+            raw モード中に SIGINT で落ちると端末が raw のまま残り、シェルが使えなくなる。
+            <code>pcntl_async_signals(true)</code> + <code>pcntl_signal(SIGINT, ...)</code> で
+            <code>stty</code> を復元してから終了する。
+            <code>register_shutdown_function</code> は SIGINT では走らないので不十分。
+          </p>
+          <p>
+            <code>pcntl</code> は拡張なので P3 の静的ビルドに含める拡張リストに入る
+            （static-php-cli は対応している）。
+            実装時に <code>pcntl</code> が AOT バイナリで使えないと判明した場合は、
+            ピッカーを raw モード不要の番号選択メニューに落とすことでフォールバックする。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="tests">
+      <h2>テスト戦略</h2>
+      <p>TDD で進める。</p>
+      <ul class="cols">
+        <li>
+          <code>tests/</code> を PHPUnit でインタプリタ実行し、<code>composer test</code> に登録する。
+          <code>project.yml</code> の <code>sources</code> は <code>src</code> だけなので
+          <code>tests/</code> は AOT に含まれない
+        </li>
+        <li>
+          <code>HttpTransport</code> のフェイクで TFC API の応答を再現する。少なくとも
+          正常系 / 422（キー衝突）/ 401（トークン不正）/ ページングの継続 を用意する
+        </li>
+        <li>
+          <code>Terminal</code> のフェイクにキー列を流し、対話フローの分岐
+          （update / skip / rename、確認画面での No、途中の入力ミス）を検証する
+        </li>
+        <li>
+          AOT バイナリに対しては <code>--version</code> と <code>--help</code> の
+          スモークテストを <code>make</code> に追加する
+        </li>
+      </ul>
+    </section>
+
+    <section id="p3">
+      <h2>P3 に引き渡す未解決事項</h2>
+      <p>P1 の実装では解決しないが、P3 の着手時に潰す必要がある項目。</p>
+      <ul class="cols">
+        <li>static-php-cli の embed ビルドが <code>bin/php-config</code> を出力するか</li>
+        <li>
+          静的 PHP を ZTS / NTS どちらで作るか
+          （PHPX は <code>php-config</code> から自動検出するので揃えれば可）
+        </li>
+        <li>
+          拡張が引く静的依存（<code>libcurl.a</code> / <code>libssl.a</code> / <code>libz.a</code> など）を
+          <code>tpc</code> の <code>-l</code> / <code>-L</code> でどう渡すか
+        </li>
+        <li>
+          P1 が必要とする拡張の一覧は <strong><code>curl</code>, <code>mbstring</code>,
+          <code>pcntl</code></strong>。<code>json</code> は PHP 8 では常に組み込みなので不要
+          （スパイクでも <code>PHP_INI_SCAN_DIR</code> なしで動いた）。
+          <code>mbstring</code> は description に日本語が入るため、
+          確認画面の桁揃えに <code>mb_strwidth()</code> が必要になる
+        </li>
+        <li>
+          Linux x86_64 のビルドは Apple Silicon 上の qemu では非現実的に遅いため、
+          リリースは GitHub Actions で行う
+        </li>
+      </ul>
+    </section>
+
+  </article>
+
+  <footer>
+    tfcenv &middot; P1 design spec &middot; 2026-09-08<br>
+    Markdown 版: 2026-09-08-tfcenv-interactive-cli-design.md
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+    var byId = {};
+    links.forEach(function (a) { byId[a.getAttribute('href').slice(1)] = a; });
+
+    var sections = links
+      .map(function (a) { return document.getElementById(a.getAttribute('href').slice(1)); })
+      .filter(Boolean);
+
+    if (!('IntersectionObserver' in window) || !sections.length) { return; }
+
+    var visible = {};
+
+    function paint() {
+      var current = null;
+      for (var i = 0; i < sections.length; i++) {
+        if (visible[sections[i].id]) { current = sections[i].id; break; }
+      }
+      links.forEach(function (a) { a.classList.remove('active'); });
+      if (current && byId[current]) { byId[current].classList.add('active'); }
+    }
+
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { visible[e.target.id] = e.isIntersecting; });
+      paint();
+    }, { rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+
+    sections.forEach(function (s) { io.observe(s); });
+    byId[sections[0].id].classList.add('active');
+  })();
+</script>
+
+</body>
+</html>
