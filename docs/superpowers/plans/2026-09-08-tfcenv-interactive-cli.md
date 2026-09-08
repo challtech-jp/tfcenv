@@ -2694,6 +2694,67 @@ final class PromptTest extends TestCase
         $this->expectException(CancelledException::class);
         $prompt->select('Category', ['terraform' => 'terraform']);
     }
+
+    public function testSelectRestoresTheTerminalWhenCancelled(): void
+    {
+        // hidden() has the same property and the same test. Ctrl-C must not be
+        // able to leave the terminal in raw mode from either prompt.
+        $terminal = new FakeTerminal();
+        $terminal->queueKeys(KeyMap::CANCEL);
+        $prompt = new Prompt($terminal, new Style(false));
+
+        try {
+            $prompt->select('Category', ['terraform' => 'terraform']);
+            $this->fail('expected a CancelledException');
+        } catch (CancelledException $e) {
+            $this->assertSame(1, $terminal->rawModeEntered());
+            $this->assertSame(1, $terminal->rawModeRestored());
+        }
+    }
+
+    public function testSelectDoesNotWrapPastTheLastOption(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueKeys(KeyMap::DOWN, KeyMap::DOWN, KeyMap::DOWN, KeyMap::ENTER);
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $chosen = $prompt->select('Category', [
+            'terraform' => 'terraform',
+            'env' => 'env',
+        ]);
+
+        $this->assertSame('env', $chosen);
+    }
+
+    public function testSelectFallsBackToTheFirstOptionWhenTheDefaultIsUnknown(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueKeys(KeyMap::ENTER);
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $chosen = $prompt->select('Category', [
+            'terraform' => 'terraform',
+            'env' => 'env',
+        ], 'nonexistent');
+
+        $this->assertSame('terraform', $chosen);
+    }
+
+    public function testHiddenTreatsEndOfInputAsCancellation(): void
+    {
+        // A partially typed secret must not be accepted as confirmed just because
+        // stdin ended; that would register a truncated value in Terraform Cloud.
+        $terminal = new FakeTerminal();
+        $terminal->queueTyping('half');
+        $prompt = new Prompt($terminal, new Style(false));
+
+        try {
+            $prompt->hidden('Value');
+            $this->fail('expected a CancelledException');
+        } catch (CancelledException $e) {
+            $this->assertSame(1, $terminal->rawModeRestored());
+        }
+    }
 }
 ```
 
@@ -2751,8 +2812,15 @@ final class Prompt
                     throw new CancelledException('cancelled');
                 }
 
-                if ($key === KeyMap::ENTER || $key === KeyMap::EOF) {
+                if ($key === KeyMap::ENTER) {
                     break;
+                }
+
+                // EOF（Ctrl-D や stdin の切断）は確認の意思表示ではない。
+                // ここで break すると打ちかけのシークレットを確定扱いにしてしまい、
+                // 切り詰められた値が TFC に登録される。
+                if ($key === KeyMap::EOF) {
+                    throw new CancelledException('input ended before the value was confirmed');
                 }
 
                 if ($key === KeyMap::BACKSPACE) {
