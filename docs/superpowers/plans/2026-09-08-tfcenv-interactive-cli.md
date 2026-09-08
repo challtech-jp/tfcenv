@@ -1682,14 +1682,23 @@ final class VariableRepository
     }
 
     /**
-     * 応答の resource object を読む。空応答なら送った側の値をそのまま返す。
+     * 応答の resource object を読む。TFC は create に 201、update に 200 で
+     * リソースを返すので、data が無い 2xx は「書き込みが適用されたか確認できない」
+     * 状態であり、送った値を成功として返してはいけない。
      */
-    private function fromDocument(array $document, Variable $fallback): Variable
+    private function fromDocument(array $document, Variable $variable): Variable
     {
         $resource = $document['data'] ?? null;
 
         if (!is_array($resource)) {
-            return $fallback;
+            throw new TfcException(
+                sprintf(
+                    'Terraform Cloud accepted the write for "%s" but returned no variable, '
+                    . 'so it cannot be confirmed. Re-run to check whether it was applied.',
+                    $variable->key,
+                ),
+                0,
+            );
         }
 
         return Variable::fromApi($resource);
