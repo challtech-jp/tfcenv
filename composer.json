@@ -1,0 +1,55 @@
+{
+    "name": "acme/tfcenv",
+    "description": "Register Terraform Cloud workspace variables from the CLI",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.4 <8.6",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "require-dev": {
+        "swoole/typephp": "^0.7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Tfcenv\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "process-timeout": 0
+    },
+    "scripts": {
+        "tfcenv": "@php bin/tfcenv",
+        "phpx": [
+            "test -n \"$PHP_HOME\"  || { echo 'PHP_HOME is unset. Run inside: nix develop'  >&2; exit 1; }",
+            "cmake -S vendor/swoole/phpx -B vendor/swoole/phpx/build -G Ninja -DCMAKE_BUILD_TYPE=Release -Dphp_dir=\"$PHP_HOME\" -DHOMEBREW_EXECUTABLE=HOMEBREW_EXECUTABLE-NOTFOUND",
+            "cmake --build vendor/swoole/phpx/build --target phpx --parallel",
+            "ln -sf \"$GMP_LIB_DIR\"/libgmp*\"$SHLIB_EXT\"* vendor/swoole/phpx/lib/",
+            "ln -sf \"$MPFR_LIB_DIR\"/libmpfr*\"$SHLIB_EXT\"* vendor/swoole/phpx/lib/"
+        ],
+        "compile": "test -n \"$PHPX_HOME\" || { echo 'PHPX_HOME is unset. Run inside: nix develop' >&2; exit 1; }; php vendor/bin/tpc.php project.yml -o tfcenv --no-progress",
+        "clean": "rm -rf build tfcenv",
+        "distclean": [
+            "@clean",
+            "rm -rf vendor"
+        ],
+        "doctor": [
+            "php -r 'printf(\"php       : %s %s\\n\", PHP_VERSION, PHP_ZTS ? \"ZTS\" : \"NTS\");'",
+            "echo \"PHP_HOME  : ${PHP_HOME:-<unset>}\"",
+            "echo \"PHPX_HOME : ${PHPX_HOME:-<unset>}\"",
+            "printf \"libphp    : %s\\n\" \"$(ls ${PHP_HOME:-/nonexistent}/lib/libphp$SHLIB_EXT 2>/dev/null || echo '<missing>')\"",
+            "printf \"libphpx   : %s\\n\" \"$(ls vendor/swoole/phpx/lib/libphpx$SHLIB_EXT 2>/dev/null || echo '<not built>')\"",
+            "printf \"tpc       : %s\\n\" \"$(test -f vendor/bin/tpc.php && echo vendor/bin/tpc.php || echo '<not installed>')\""
+        ]
+    },
+    "scripts-descriptions": {
+        "tfcenv": "Run the CLI through the PHP interpreter, without an AOT build",
+        "phpx": "Build libphpx, the runtime the generated C++ links against",
+        "compile": "AOT compile src/ into a native ./tfcenv binary",
+        "clean": "Remove the build directory and the binary",
+        "distclean": "clean, plus remove vendor/",
+        "doctor": "Show what the toolchain resolved to"
+    }
+}

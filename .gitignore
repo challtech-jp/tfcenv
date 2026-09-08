@@ -1,0 +1,8 @@
+/vendor/
+/build/
+/tfcenv
+/.composer-cache/
+/.direnv/
+/result
+/result-*
+.DS_Store

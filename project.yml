@@ -1,0 +1,11 @@
+# TypePHP AOT build config. CLI flags override these.
+# https://github.com/swoole/typephp
+name: tfcenv
+mode: bin
+php-version: "8.5"
+optimize: 2
+build-dir: build
+cxx-std: c++17
+
+sources:
+  - src

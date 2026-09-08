@@ -1,0 +1,14 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * Interpreter-mode entry point.
+ *
+ * The AOT build compiles src/ only and uses main() as the process entry, so
+ * this wrapper is not part of the binary - it exists so the same source can
+ * be run without building. See `make run`.
+ */
+require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/../src/main.php';
+
+main($argc, $argv);
