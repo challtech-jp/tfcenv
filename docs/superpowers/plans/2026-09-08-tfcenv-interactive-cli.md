@@ -2226,7 +2226,7 @@ needed anywhere."
 
 **Interfaces:**
 - Consumes: `Terminal` / `KeyMap`（Task 6）
-- Produces: `Tfcenv\Terminal\SttyTerminal`: `__construct()`、`Terminal` の全メソッド
+- Produces: `Tfcenv\Terminal\SttyTerminal`: `Terminal` の全メソッド（明示コンストラクタは持たない）
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -2368,6 +2368,13 @@ final class SttyTerminal implements Terminal
         return KeyMap::fromBytes($byte . $rest);
     }
 
+    /**
+     * raw モードに入る。
+     *
+     * 確立できなかったときに黙って戻ってはいけない。cooked モードのままだと
+     * echo が有効なので Prompt::hidden() がシークレットを画面に出してしまう。
+     * それは hidden() の唯一の存在理由を壊すので、例外で止める。
+     */
     public function enterRawMode(): void
     {
         if ($this->savedMode !== null) {
@@ -2377,15 +2384,29 @@ final class SttyTerminal implements Terminal
         $saved = trim((string) shell_exec('stty -g 2>/dev/null'));
 
         if ($saved === '') {
-            // stty が使えない環境。raw モードには入らない。
-            return;
+            throw new \RuntimeException(
+                'Could not read the current terminal mode with stty, so the terminal '
+                . 'cannot be switched to raw mode safely.'
+            );
         }
 
+        // raw は isig も落とすので Ctrl-C は SIGINT にならず 0x03 として読める。
+        // 先に shutdown hook を張ってから切り替える。逆順だと切り替え直後に
+        // 落ちた場合に復元されない窓ができる。
         $this->savedMode = $saved;
         $this->installShutdownHook();
 
-        // raw は isig も落とすので Ctrl-C は SIGINT にならず 0x03 として読める。
-        shell_exec('stty raw -echo 2>/dev/null');
+        exec('stty raw -echo 2>/dev/null', $ignored, $status);
+
+        if ($status !== 0) {
+            // 切り替えは失敗しているので復元するものは無い。状態を戻して投げる。
+            $this->savedMode = null;
+
+            throw new \RuntimeException(
+                'Could not switch the terminal to raw mode. Refusing to continue, '
+                . 'because reading a secret with echo still enabled would print it.'
+            );
+        }
     }
 
     public function restoreMode(): void
@@ -4690,6 +4711,12 @@ final class Application
         try {
             return $command->run();
         } catch (TfcException $e) {
+            $this->terminal->writeError($e->getMessage() . "\n");
+
+            return 1;
+        } catch (\Throwable $e) {
+            // SttyTerminal は raw モードを確立できないと RuntimeException を投げる。
+            // 対話ツールがスタックトレースを吐いて落ちるより、1行で伝えて終わる。
             $this->terminal->writeError($e->getMessage() . "\n");
 
             return 1;
