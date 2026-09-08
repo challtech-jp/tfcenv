@@ -1744,7 +1744,7 @@ rather than sending a PATCH to a path ending in a slash."
 - Consumes: なし
 - Produces:
   - `Tfcenv\Terminal\Terminal`（interface）: `isTty(): bool`、`width(): int`、`write(string $text): void`、`writeError(string $text): void`、`readLine(): string`、`readKey(): string`、`enterRawMode(): void`、`restoreMode(): void`
-  - `Tfcenv\Terminal\KeyMap`: `const UP = 'up'` / `DOWN = 'down'` / `ENTER = 'enter'` / `BACKSPACE = 'backspace'` / `CANCEL = 'cancel'` / `EOF = 'eof'`、`static fromBytes(string $bytes): string`、`static isPrintable(string $key): bool`
+  - `Tfcenv\Terminal\KeyMap`: `const UP = 'up'` / `DOWN = 'down'` / `ENTER = 'enter'` / `BACKSPACE = 'backspace'` / `CANCEL = 'cancel'` / `EOF = 'eof'` / `UNKNOWN = 'unknown'`、`static fromBytes(string $bytes): string`、`static isPrintable(string $key): bool`
   - `Tfcenv\Terminal\CancelledException`: `extends \Exception`
   - `Tfcenv\Terminal\Style`: `__construct(private readonly bool $enabled)`、`static detect(Terminal $terminal, ?string $noColor): self`、`accent(string $s): string`、`ok(string $s): string`、`bad(string $s): string`、`warn(string $s): string`、`dim(string $s): string`、`bold(string $s): string`
   - `Tfcenv\Tests\Support\FakeTerminal`: `__construct(bool $tty = true)`、`queueLine(string $line): void`、`queueKeys(string ...$keys): void`、`queueTyping(string $text): void`（1文字ずつキー列として流す）、`output(): string`、`errorOutput(): string`、`rawModeEntered(): int`、`rawModeRestored(): int`
