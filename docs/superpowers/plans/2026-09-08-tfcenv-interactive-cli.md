@@ -3123,6 +3123,34 @@ final class PickerTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $picker->pick('Workspace', []);
     }
+
+    public function testItScrollsTheWindowToKeepTheCursorVisible(): void
+    {
+        // 実運用の organization はワークスペースが visibleRows(8) を超えるので、
+        // スクロール分岐は例外的な経路ではなく通常の経路になる。
+        $items = [];
+
+        for ($i = 1; $i <= 12; $i++) {
+            $items['ws-' . $i] = sprintf('workspace-%02d', $i);
+        }
+
+        $terminal = new FakeTerminal();
+        $terminal->queueKeys(...array_fill(0, 9, KeyMap::DOWN));
+        $terminal->queueKeys(KeyMap::ENTER);
+        $picker = new Picker($terminal, new Style(false));
+
+        $chosen = $picker->pick('Workspace', $items);
+
+        $this->assertSame('ws-10', $chosen);
+
+        // 最後の描画だけを見る。clearLines() はエスケープを書くだけで
+        // FakeTerminal の蓄積出力からは消えないため。
+        $renders = explode('filter:', $terminal->output());
+        $final = $renders[count($renders) - 1];
+
+        $this->assertStringContainsString('workspace-10', $final);
+        $this->assertStringNotContainsString('workspace-01', $final);
+    }
 }
 ```
 
