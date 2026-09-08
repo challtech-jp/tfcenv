@@ -21,6 +21,7 @@ final class FakeTerminal implements Terminal
     private string $errorOutput = '';
     private int $entered = 0;
     private int $restored = 0;
+    private bool $atEof = false;
 
     public function __construct(
         private readonly bool $tty = true,
@@ -30,6 +31,17 @@ final class FakeTerminal implements Terminal
     public function queueLine(string $line): void
     {
         $this->lines[] = $line;
+    }
+
+    /**
+     * 以降の readLine() を EOF として扱う。実物の SttyTerminal は stdin が
+     * 閉じたあと '' を返し続けるので、それに合わせる。キュー枯渇時の
+     * RuntimeException は「テストが行数を数え間違えた」を捕まえるためのもので、
+     * EOF の再現とは別物。
+     */
+    public function queueEof(): void
+    {
+        $this->atEof = true;
     }
 
     public function queueKeys(string ...$keys): void
@@ -71,6 +83,10 @@ final class FakeTerminal implements Terminal
     public function readLine(): string
     {
         if ($this->lines === []) {
+            if ($this->atEof) {
+                return '';
+            }
+
             // FakeTransport と同じ方針。キューの数え間違いをハングではなく
             // 即座の失敗にする。空行が欲しいテストは queueLine('') を明示する。
             throw new \RuntimeException('FakeTerminal was asked to read a line with none queued');

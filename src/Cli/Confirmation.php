@@ -39,12 +39,14 @@ final class Confirmation
 
         $this->terminal->write("\n");
 
+        // 既定は false のまま渡すこと。空の返事は EOF の可能性があり、
+        // 既定を true にすると入力が途切れただけで書き込んでしまう。
         return $this->prompt->confirm(sprintf(
             'Apply %d change(s)? (create %d / update %d)',
             count($set->changes),
             $set->countOf(ChangeOp::Create),
             $set->countOf(ChangeOp::Update),
-        ));
+        ), false);
     }
 
     private function label(ChangeOp $op): string

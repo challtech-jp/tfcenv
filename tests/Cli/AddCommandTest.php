@@ -339,6 +339,41 @@ final class AddCommandTest extends TestCase
         $this->assertCount(2, $transport->requests());               // 一覧2回のみ、書き込みなし
     }
 
+    public function testItRefusesToApplyWhenInputEndsAtTheGate(): void
+    {
+        // 入力が途切れただけで Terraform Cloud に書き込まれてはいけない。
+        $transport = new FakeTransport();
+        $this->queueWorkspaces($transport);
+        $transport->queue(200, json_encode([
+            'data' => [[
+                'id' => 'var-9',
+                'attributes' => [
+                    'key' => 'GTM_ID',
+                    'value' => 'GTM-XXXXXXX',
+                    'category' => 'terraform',
+                    'sensitive' => false,
+                    'description' => 'live',
+                ],
+            ]],
+        ]));
+
+        $terminal = new FakeTerminal();
+        $terminal->queueLine('acme');
+        $terminal->queueKeys(KeyMap::ENTER);   // workspace
+        $terminal->queueLine('GTM_ID');        // 既存キー
+        $terminal->queueKeys(KeyMap::ENTER);   // What now? -> Update the value
+        $terminal->queueLine('newvalue');      // value（非 sensitive なので行入力）
+        $terminal->queueEof();                 // ここで入力が途切れる
+
+        $this->command($transport, $terminal)->run();
+
+        // 終了コードだけを見てはいけない。早期 return のバグでも 0 になる。
+        foreach ($transport->requests() as $request) {
+            $this->assertNotSame('POST', $request->method, 'nothing may be created when input ends');
+            $this->assertNotSame('PATCH', $request->method, 'nothing may be updated when input ends');
+        }
+    }
+
     public function testItGivesUpAfterRepeatedEmptyKeys(): void
     {
         $transport = new FakeTransport();
