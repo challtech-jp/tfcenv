@@ -20,7 +20,7 @@
 **TypePHP の言語制約**（spec「TypePHP 制約の反映」より）
 
 - `src/` に置くコードは**素の PHP だけで書く**。TypePHP 独自機能（ユニバーサルメソッド `$s->upper()` / `$arr->count()`、`std::` コンテナ、`#[Native]`、`bigInt` などの高精度型）を**一切使わない**。テストはインタプリタで走るのでこれらは未定義になり、さらにユニバーサルメソッドは型によって破壊的・非破壊的が変わる。標準関数（`strtoupper()` / `count()`）を使う。
-- グローバル関数を `str_` / `array_` / `int_` / `float_` / `bool_` / `stream_` / `bigint_` / `decimal_` / `bigfloat_` で始める名前で定義しない。TypePHP がこれを拡張メソッドとして自動発見してしまう。
+- グローバル関数を `str_` / `array_` / `int_` / `float_` / `bool_` / `stream_` / `bigint_` / `decimal_` / `bigfloat_` で始める名前で**定義**しない。TypePHP がこれを拡張メソッドとして自動発見してしまう。**標準関数の呼び出しは制限しない** — `array_shift()` / `str_contains()` / `sprintf()` などは自由に使ってよい。禁止しているのは同じ接頭辞で新しいグローバル関数を宣言することだけ。
 - `main()` は `src/main.php` にグローバル名前空間で定義する。`main(int $argc, array $argv): void` のみ。返り値は `void` 固定なので終了コードは `exit()` で返す。
 - グローバルスコープに実行文を書かない。`src/main.php` も `use` と `function main()` の宣言だけ。
 - **メソッド名に `toInt` / `toString` / `toFloat` / `toArray` / `toAny` / `toRef` を使わない**（大文字小文字は区別しない）。予約キーワードメソッドとして通常メソッドより先に解決される。本計画は `payload()` / `displayValue()` のように `to` + 型名を避けた名前で統一している。
