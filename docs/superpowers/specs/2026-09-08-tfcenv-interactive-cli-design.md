@@ -110,13 +110,18 @@ TFC のデフォルトページサイズは 20、最大 100。
 そのため衝突時に見せられるのはメタデータ（category / sensitive / description）だけで、
 現在値は表示できない。
 
-### 実装時に確認する事項
+### `sensitive` は解除できない（2026-09-10 に実物で確認）
 
-**`sensitive: true` の変数を `PATCH` で `false` に戻せるかは未検証。**
-トークンがないため確認できていない。戻せない場合は 422 が返るので、
-既存のエラー経路で「TFC では sensitive を解除できない」と伝える。
-`Update the value and attributes` で sensitive を Yes → No にしたときに通る経路なので、
-実装時に実物で確かめる。
+**`sensitive: true` の変数を `PATCH` で `false` に戻すことはできない。** HTTP 422 が返る:
+
+> Sensitive cannot be changed from true to false on saved records. To make this variable
+> readable, destroy this record and create a new one with the same key value.;
+> Sensitive cannot be updated for a sensitive variable
+
+`Update the value and attributes` で sensitive を Yes → No にしたときに通る経路。
+確認画面は `update` として表示され、送信して初めて失敗する。
+現状は既存のエラー経路が TFC のメッセージをそのまま出すだけで、
+「削除して作り直す」という回避策には誘導していない。
 
 ## フロー
 

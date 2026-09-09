@@ -403,6 +403,15 @@
   .note-body { max-width: 78ch; }
   .note-body p { max-width: none; }
   .note-body p:last-child { margin-bottom: 0; }
+  .note-body blockquote {
+    margin: 12px 0;
+    padding-left: 16px;
+    border-left: 2px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--muted);
+  }
   .note-label {
     font-family: var(--mono);
     font-size: 10px;
@@ -732,15 +741,23 @@ tfcenv --version</code></pre>
       </div>
 
       <div class="note">
-        <span class="note-label">実装時に確認</span>
+        <span class="note-label">解除できない</span>
         <div class="note-body">
           <p>
             <strong><code>sensitive: true</code> の変数を <code>PATCH</code> で
-            <code>false</code> に戻せるかは未検証。</strong>
-            トークンがないため確認できていない。戻せない場合は 422 が返るので、
-            既存のエラー経路で「TFC では sensitive を解除できない」と伝える。
-            <em>Update the value and attributes</em> で sensitive を Yes → No に
-            したときに通る経路なので、実装時に実物で確かめる。
+            <code>false</code> に戻すことはできない。</strong>
+            2026-09-10 に実物で確認。HTTP 422 が返る:
+          </p>
+          <blockquote>
+            Sensitive cannot be changed from true to false on saved records. To make this
+            variable readable, destroy this record and create a new one with the same key
+            value.; Sensitive cannot be updated for a sensitive variable
+          </blockquote>
+          <p>
+            <em>Update the value and attributes</em> で sensitive を Yes → No にしたときに
+            通る経路。確認画面は <code>update</code> として表示され、送信して初めて失敗する。
+            現状は既存のエラー経路が TFC のメッセージをそのまま出すだけで、
+            「削除して作り直す」という回避策には誘導していない。
           </p>
         </div>
       </div>
