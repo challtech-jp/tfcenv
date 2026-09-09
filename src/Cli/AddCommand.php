@@ -152,8 +152,9 @@ final class AddCommand
             if ($key === '') {
                 $emptyKeys++;
 
-                // readLine() は「空行の Enter」と EOF を同じ '' に潰すので、
-                // stdin が閉じると再入力を無限に促し続ける。回数で打ち切る。
+                // EOF は readLine() が null を返して CancelledException になるので、
+                // ここに来るのは本当に空行を入れられた場合だけ。それでも同じ質問を
+                // 際限なく出し直さないよう、繰り返しの回数で打ち切る。
                 if ($emptyKeys >= self::MAX_EMPTY_KEYS) {
                     throw new CancelledException('no key was entered');
                 }

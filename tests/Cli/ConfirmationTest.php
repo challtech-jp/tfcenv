@@ -31,7 +31,7 @@ final class ConfirmationTest extends TestCase
         return new Confirmation($terminal, $style, new Prompt($terminal, $style));
     }
 
-    public function testItShowsTheWorkspaceAndTheOperationBreakdown(): void
+    public function testItShowsTheWorkspaceAndEveryChange(): void
     {
         $terminal = new FakeTerminal();
         $terminal->queueLine('y');
@@ -91,5 +91,114 @@ final class ConfirmationTest extends TestCase
 
         $this->assertFalse($this->confirmation($terminal)->ask($set));
         $this->assertStringContainsString('nothing to apply', $terminal->output());
+    }
+
+    public function testItAlignsTheKeyAndValueColumnsAcrossTheChangeSet(): void
+    {
+        $terminal = new FakeTerminal(false);
+        $terminal->queueLine('n');
+        $set = new ChangeSet('acme', new Workspace('ws-1', 'gamma-ai-ocr'), [
+            new Change(ChangeOp::Create, new Variable('yrdy', 'secret', Category::Terraform, true, 'aaa')),
+            new Change(ChangeOp::Update, new Variable('GTM_ID', 'GTM-XXXXXXX', Category::Terraform, false, 'live', 'var-2')),
+            new Change(ChangeOp::Create, new Variable('partner_id', 'secret', Category::Terraform, true, '連携先連携')),
+        ]);
+
+        $this->confirmation($terminal)->ask($set);
+
+        // 一番広いキーと値に合わせて桁が揃い、属性は · で並ぶ
+        $this->assertSame([
+            '    create  yrdy      ••••••••     terraform · sensitive · "aaa"',
+            '    update  GTM_ID    GTM-XXXXXXX  terraform · plain · "live"',
+            '    create  partner_id  ••••••••     terraform · sensitive · "連携先連携"',
+        ], $this->rows($terminal->output()));
+    }
+
+    public function testItLeavesOutTheQuotesWhenThereIsNoDescription(): void
+    {
+        $terminal = new FakeTerminal(false);
+        $terminal->queueLine('n');
+        $set = new ChangeSet('acme', new Workspace('ws-1', 'gamma-ai-ocr'), [
+            new Change(ChangeOp::Create, new Variable('yrdy', 'secret', Category::Terraform, true, '')),
+        ]);
+
+        $this->confirmation($terminal)->ask($set);
+
+        $this->assertSame(
+            ['    create  yrdy  ••••••••  terraform · sensitive'],
+            $this->rows($terminal->output())
+        );
+        $this->assertStringNotContainsString(' · ""', $terminal->output());
+    }
+
+    public function testItAlignsByDisplayWidthSoFullWidthValuesDoNotShiftTheAttributes(): void
+    {
+        $terminal = new FakeTerminal(false);
+        $terminal->queueLine('n');
+        $set = new ChangeSet('acme', new Workspace('ws-1', 'gamma-ai-ocr'), [
+            new Change(ChangeOp::Update, new Variable('partner_name', '連携先', Category::Terraform, false, '連携先連携', 'var-1')),
+            new Change(ChangeOp::Update, new Variable('partner_code', 'PARTNER-01', Category::Terraform, false, 'live', 'var-2')),
+        ]);
+
+        $this->confirmation($terminal)->ask($set);
+
+        $rows = $this->rows($terminal->output());
+        $this->assertCount(2, $rows);
+
+        // 全角4文字は表示幅8で 'PARTNER-01' と同じ桁。バイト長で埋めると
+        // '連携先' が12バイト扱いになり、下の行の属性だけ右へずれる。
+        $this->assertSame(
+            $this->attributeOffset($rows[0]),
+            $this->attributeOffset($rows[1])
+        );
+        $this->assertSame([
+            '    update  partner_name  連携先  terraform · plain · "連携先連携"',
+            '    update  partner_code  PARTNER-01  terraform · plain · "live"',
+        ], $rows);
+    }
+
+    public function testTheGateCountsTheChangesInWords(): void
+    {
+        $one = new FakeTerminal(false);
+        $one->queueLine('n');
+        $this->confirmation($one)->ask(new ChangeSet('acme', new Workspace('ws-1', 'gamma-ai-ocr'), [
+            new Change(ChangeOp::Create, new Variable('yrdy', 'secret', Category::Terraform, true, 'aaa')),
+        ]));
+
+        $two = new FakeTerminal(false);
+        $two->queueLine('n');
+        $this->confirmation($two)->ask($this->set());
+
+        $this->assertStringContainsString('Apply 1 change?', $one->output());
+        $this->assertStringContainsString('Apply 2 changes?', $two->output());
+
+        // 内訳は行が見せているので、質問文に (create N / update M) は付けない
+        $this->assertStringNotContainsString('(create', $two->output());
+    }
+
+    /**
+     * 変更行だけを取り出す。行頭の4スペースが変更行の目印。
+     *
+     * @return string[]
+     */
+    private function rows(string $output): array
+    {
+        $rows = [];
+
+        foreach (explode("\n", $output) as $line) {
+            if (str_starts_with($line, '    ')) {
+                $rows[] = $line;
+            }
+        }
+
+        return $rows;
+    }
+
+    /** 属性の桁が始まる表示幅上の位置 */
+    private function attributeOffset(string $row): int
+    {
+        $at = mb_strpos($row, 'terraform');
+        $this->assertNotFalse($at, 'a change row always names its category');
+
+        return mb_strwidth(mb_substr($row, 0, $at));
     }
 }
