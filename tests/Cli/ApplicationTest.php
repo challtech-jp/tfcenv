@@ -92,4 +92,56 @@ final class ApplicationTest extends TestCase
         $this->assertStringNotContainsString('tok-do-not-leak', $terminal->output());
         $this->assertStringNotContainsString('tok-do-not-leak', $terminal->errorOutput());
     }
+
+    public function testHelpDocumentsTheNonInteractiveForm(): void
+    {
+        $terminal = new FakeTerminal();
+
+        (new Application($terminal))->run(2, ['tfcenv', '--help']);
+
+        $output = $terminal->output();
+        $this->assertStringContainsString('KEY=VALUE', $output);
+        $this->assertStringContainsString('--workspace', $output);
+        $this->assertStringContainsString('--update', $output);
+    }
+
+    /**
+     * 引数のある add は非対話モードなので、TTY が無くても引数の解釈まで進む。
+     * 進んだ証拠として、TTY のメッセージではなく引数のエラーが返る。
+     */
+    public function testAddWithArgumentsDoesNotRequireATty(): void
+    {
+        putenv('TFC_TOKEN=tok');
+        $terminal = new FakeTerminal(false);
+
+        $exit = (new Application($terminal))->run(3, ['tfcenv', 'add', 'KEY=v']);
+
+        $this->assertSame(1, $exit);
+        $error = $terminal->errorOutput();
+        $this->assertStringNotContainsString('TTY', $error);
+        $this->assertStringContainsString('--workspace', $error);
+    }
+
+    public function testAUsageErrorIsReportedWithoutATrace(): void
+    {
+        putenv('TFC_TOKEN=tok');
+        $terminal = new FakeTerminal(false);
+
+        $exit = (new Application($terminal))->run(5, ['tfcenv', 'add', '-w', 'stg', '--plain']);
+
+        $this->assertSame(1, $exit);
+        $error = $terminal->errorOutput();
+        $this->assertStringContainsString('--plain', $error);
+        $this->assertStringNotContainsString('#0', $error);
+    }
+
+    public function testAddWithArgumentsStillNeedsAToken(): void
+    {
+        $terminal = new FakeTerminal(false);
+
+        $exit = (new Application($terminal))->run(5, ['tfcenv', 'add', '-w', 'stg', 'KEY=v']);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('TFC_TOKEN', $terminal->errorOutput());
+    }
 }

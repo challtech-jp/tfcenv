@@ -24,6 +24,48 @@ more variables. Keys that already exist are detected before anything is sent,
 and offered as an update, a skip, or a different key. Nothing is written until
 you confirm.
 
+### Without prompting
+
+Give `add` a variable and it registers that one variable and exits. No TTY is
+needed, so this is the form to use from a script.
+
+```console
+$ tfcenv add -w alpha-core-stg GTM_ID=GTM-XXXXXXX
+$ tfcenv add -w alpha-core-stg -c env -s -d 'production DB' DB_PASSWORD
+$ tfcenv add -w alpha-core-stg -u GTM_ID=GTM-XXX
+```
+
+A key on its own — no `=` — takes its value from the environment variable of
+the same name, which keeps secrets out of your shell history and out of `ps`.
+Write `KEY=VALUE` when you would rather type the value.
+
+| Option | |
+|---|---|
+| `-w, --workspace NAME` | required |
+| `-o, --org NAME` | defaults to `$TFC_ORG` |
+| `-c, --category NAME` | `terraform` or `env`. Defaults to `terraform` |
+| `-s, --sensitive` | register the value as sensitive |
+| `-d, --description TEXT` | |
+| `-u, --update` | overwrite the variable if the key already exists |
+
+Without `--update`, a key that already exists is an error and nothing is sent.
+With it, the attributes you do not pass keep the values they have in Terraform
+Cloud — so `-u KEY=new` replaces the value and leaves the category, the
+description, and the sensitive flag alone.
+
+There is no flag for turning a sensitive variable back into a plain one:
+Terraform Cloud rejects that with `422 Sensitive cannot be changed from true to
+false on saved records`. Delete the variable and create it again.
+
+To register several at once, loop:
+
+```bash
+export PARTNER_TOKEN=... DB_PASSWORD=...
+for k in PARTNER_TOKEN DB_PASSWORD; do
+  tfcenv add -w alpha-core-stg -s "$k"
+done
+```
+
 ## Development shell
 
 One shell, `nix develop`, with everything: PHP 8.5 built with the **embed

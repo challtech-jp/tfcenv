@@ -35,7 +35,7 @@ final class AddCommand
         if (!$this->terminal->isTty()) {
             $this->terminal->writeError(
                 "tfcenv add is interactive and needs a TTY.\n"
-                . "Run it from a terminal, or wait for the JSON input mode.\n",
+                . "Run it from a terminal, or pass the variable as arguments: tfcenv add -w NAME KEY=VALUE\n",
             );
 
             return 1;

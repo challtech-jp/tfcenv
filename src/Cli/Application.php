@@ -29,7 +29,7 @@ final class Application
         return match ($command) {
             '--version', '-v' => $this->printVersion(),
             '--help', '-h' => $this->printHelp(),
-            'add' => $this->add(),
+            'add' => $this->add(array_slice($argv, 2)),
             '' => $this->usageError('tfcenv needs a command.'),
             default => $this->usageError(sprintf('Unknown command "%s".', $command)),
         };
@@ -65,9 +65,28 @@ final class Application
         return "tfcenv - register Terraform Cloud workspace variables from the CLI\n"
             . "\n"
             . "Usage:\n"
-            . "  tfcenv add        register workspace variables interactively\n"
+            . "  tfcenv add                       register variables interactively\n"
+            . "  tfcenv add [options] KEY=VALUE   register one variable without prompting\n"
+            . "  tfcenv add [options] KEY         the same, taking the value from \$KEY\n"
             . "  tfcenv --help\n"
             . "  tfcenv --version\n"
+            . "\n"
+            . "Options (non-interactive only):\n"
+            . "  -w, --workspace NAME   required\n"
+            . "  -o, --org NAME         defaults to \$TFC_ORG\n"
+            . "  -c, --category NAME    terraform or env. Defaults to terraform\n"
+            . "  -s, --sensitive        register the value as sensitive\n"
+            . "  -d, --description TEXT\n"
+            . "  -u, --update           overwrite the variable if the key already exists.\n"
+            . "                         Attributes you do not pass keep their current values\n"
+            . "\n"
+            . "Examples:\n"
+            . "  tfcenv add -w alpha-core-stg GTM_ID=GTM-XXXXXXX\n"
+            . "  tfcenv add -w alpha-core-stg -c env -s -d 'production DB' DB_PASSWORD\n"
+            . "  tfcenv add -w alpha-core-stg -u GTM_ID=GTM-XXX\n"
+            . "\n"
+            . "Terraform Cloud cannot turn a sensitive variable back into a plain one,\n"
+            . "so there is no flag for it. Delete the variable and create it again.\n"
             . "\n"
             . "Environment:\n"
             . '  TFC_TOKEN         required. Create one at ' . self::TOKEN_URL . "\n"
@@ -75,7 +94,13 @@ final class Application
             . "  NO_COLOR          optional. Set to disable ANSI colour\n";
     }
 
-    private function add(): int
+    /**
+     * 引数が1つでも続いていれば非対話モード。対話モードとの分岐をここで済ませ、
+     * トークンの確認と HTTP まわりの組み立ては両方で共有する。
+     *
+     * @param string[] $args
+     */
+    private function add(array $args): int
     {
         $token = (string) getenv('TFC_TOKEN');
 
@@ -93,24 +118,24 @@ final class Application
         $noColor = getenv('NO_COLOR');
 
         $style = Style::detect($this->terminal, $noColor === false ? null : (string) $noColor);
-        $prompt = new Prompt($this->terminal, $style);
         $client = new Client(new CurlTransport(), $token);
         $variables = new VariableRepository($client);
-
-        $command = new AddCommand(
-            new WorkspaceRepository($client),
-            $variables,
-            $this->terminal,
-            $style,
-            $prompt,
-            new Picker($this->terminal, $style),
-            new Confirmation($this->terminal, $style, $prompt),
-            new Applier($variables, $this->terminal, $style),
-            $organization,
-        );
+        $workspaces = new WorkspaceRepository($client);
+        $applier = new Applier($variables, $this->terminal, $style);
 
         try {
-            return $command->run();
+            if ($args === []) {
+                return $this->interactive($workspaces, $variables, $applier, $style, $organization);
+            }
+
+            $options = AddOptions::parse($args, $organization);
+
+            return (new DirectAddCommand($workspaces, $variables, $this->terminal, $applier))->run($options);
+        } catch (UsageException $e) {
+            // 引数の書き方の間違いなので、何も送られていないことが確実。
+            $this->terminal->writeError($e->getMessage() . "\n");
+
+            return 1;
         } catch (TfcException $e) {
             $this->terminal->writeError($e->getMessage() . "\n");
 
@@ -122,5 +147,29 @@ final class Application
 
             return 1;
         }
+    }
+
+    private function interactive(
+        WorkspaceRepository $workspaces,
+        VariableRepository $variables,
+        Applier $applier,
+        Style $style,
+        string $organization,
+    ): int {
+        $prompt = new Prompt($this->terminal, $style);
+
+        $command = new AddCommand(
+            $workspaces,
+            $variables,
+            $this->terminal,
+            $style,
+            $prompt,
+            new Picker($this->terminal, $style),
+            new Confirmation($this->terminal, $style, $prompt),
+            $applier,
+            $organization,
+        );
+
+        return $command->run();
     }
 }

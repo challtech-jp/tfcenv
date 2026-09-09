@@ -67,4 +67,48 @@ final class WorkspaceRepository
 
         return $workspaces;
     }
+
+    /**
+     * 名前でワークスペースを1件引く。TFC の show エンドポイントは
+     * organization + name を直接受けるので、一覧をページングで辿る必要がない。
+     * 非対話モードは1回の実行で1変数しか登録しないため、ここが速いかどうかが
+     * まとめて登録するときの体感を決める。
+     *
+     * 存在しなければ null。それ以外の失敗（401 など）はそのまま投げる。
+     */
+    public function findByName(string $organization, string $name): ?Workspace
+    {
+        $path = sprintf(
+            '/organizations/%s/workspaces/%s',
+            rawurlencode($organization),
+            rawurlencode($name),
+        );
+
+        try {
+            $document = $this->client->get($path);
+        } catch (TfcException $e) {
+            if ($e->status() === 404) {
+                return null;
+            }
+
+            throw $e;
+        }
+
+        $resource = is_array($document['data'] ?? null) ? $document['data'] : [];
+        $attributes = is_array($resource['attributes'] ?? null) ? $resource['attributes'] : [];
+        $id = (string) ($resource['id'] ?? '');
+
+        // id が無いと以降の /workspaces/{id}/vars が組み立てられない。
+        // 空 id で送って別の何かを書き換えるより、ここで止める。
+        if ($id === '') {
+            throw new TfcException(sprintf(
+                'Terraform Cloud returned no id for the workspace "%s".',
+                $name,
+            ), 0);
+        }
+
+        $returned = (string) ($attributes['name'] ?? '');
+
+        return new Workspace($id, $returned === '' ? $name : $returned);
+    }
 }

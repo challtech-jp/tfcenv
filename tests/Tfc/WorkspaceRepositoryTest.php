@@ -5,6 +5,7 @@ namespace Tfcenv\Tests\Tfc;
 use PHPUnit\Framework\TestCase;
 use Tfcenv\Tests\Support\FakeTransport;
 use Tfcenv\Tfc\Client;
+use Tfcenv\Tfc\TfcException;
 use Tfcenv\Tfc\WorkspaceRepository;
 
 final class WorkspaceRepositoryTest extends TestCase
@@ -117,5 +118,72 @@ final class WorkspaceRepositoryTest extends TestCase
             'data' => $data,
             'meta' => ['pagination' => ['next-page' => $nextPage]],
         ], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function testFindByNameAsksTheShowEndpointDirectly(): void
+    {
+        $transport = new FakeTransport();
+        $transport->queue(200, $this->workspaceDocument('ws-7', 'alpha-core-stg'));
+        $repository = new WorkspaceRepository(new Client($transport, 'tok'));
+
+        $workspace = $repository->findByName('acme', 'alpha-core-stg');
+
+        $this->assertNotNull($workspace);
+        $this->assertSame('ws-7', $workspace->id);
+        $this->assertSame('alpha-core-stg', $workspace->name);
+        $this->assertCount(1, $transport->requests());
+        $this->assertStringEndsWith(
+            '/organizations/acme/workspaces/alpha-core-stg',
+            $transport->lastRequest()->url,
+        );
+    }
+
+    public function testFindByNameEscapesTheOrganizationAndTheName(): void
+    {
+        $transport = new FakeTransport();
+        $transport->queue(200, $this->workspaceDocument('ws-1', 'a b'));
+        $repository = new WorkspaceRepository(new Client($transport, 'tok'));
+
+        $repository->findByName('my org', 'a b');
+
+        $this->assertStringEndsWith('/organizations/my%20org/workspaces/a%20b', $transport->lastRequest()->url);
+    }
+
+    public function testFindByNameReturnsNullWhenTheWorkspaceDoesNotExist(): void
+    {
+        $transport = new FakeTransport();
+        $transport->queue(404, '{"errors":[{"detail":"not found"}]}');
+        $repository = new WorkspaceRepository(new Client($transport, 'tok'));
+
+        $this->assertNull($repository->findByName('acme', 'nope'));
+    }
+
+    public function testFindByNameLetsOtherFailuresThrough(): void
+    {
+        $transport = new FakeTransport();
+        $transport->queue(401, '{"errors":[{"detail":"unauthorized"}]}');
+        $repository = new WorkspaceRepository(new Client($transport, 'tok'));
+
+        $this->expectException(TfcException::class);
+
+        $repository->findByName('acme', 'alpha-core-stg');
+    }
+
+    public function testFindByNameRejectsAResponseWithoutAnId(): void
+    {
+        $transport = new FakeTransport();
+        $transport->queue(200, '{"data":{"attributes":{"name":"alpha-core-stg"}}}');
+        $repository = new WorkspaceRepository(new Client($transport, 'tok'));
+
+        $this->expectException(TfcException::class);
+
+        $repository->findByName('acme', 'alpha-core-stg');
+    }
+
+    private function workspaceDocument(string $id, string $name): string
+    {
+        return (string) json_encode([
+            'data' => ['id' => $id, 'type' => 'workspaces', 'attributes' => ['name' => $name]],
+        ]);
     }
 }
