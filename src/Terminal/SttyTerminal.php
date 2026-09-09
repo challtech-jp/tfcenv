@@ -37,12 +37,13 @@ final class SttyTerminal implements Terminal
         fwrite(STDERR, $text);
     }
 
-    public function readLine(): string
+    public function readLine(): ?string
     {
         $line = fgets(STDIN);
 
+        // EOF は「空行で Enter」ではない。潰さずに null で返す。
         if ($line === false) {
-            return '';
+            return null;
         }
 
         return rtrim($line, "\r\n");

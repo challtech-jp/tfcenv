@@ -31,6 +31,14 @@ final class Prompt
         $this->terminal->write($this->question($label, $hint));
 
         $typed = $this->terminal->readLine();
+
+        // EOF は答えではない。畳む前に投げること。EOF のときは端末が改行を
+        // エコーしていないのでカーソルは質問行のままで、そこで1行戻すと
+        // ひとつ上の回答済み行を消してしまう。
+        if ($typed === null) {
+            throw new CancelledException('input ended');
+        }
+
         $answer = trim($typed);
         $value = $answer === '' ? $default : $answer;
 
@@ -103,6 +111,12 @@ final class Prompt
             $this->terminal->write($this->question($label, $hint));
 
             $typed = $this->terminal->readLine();
+
+            // 空行の Enter は既定の採用。EOF は意思表示ではないので中止する。
+            if ($typed === null) {
+                throw new CancelledException('input ended');
+            }
+
             $answer = strtolower(trim($typed));
             $shown = $this->questionWidth($label, mb_strwidth($hintText) + 1, mb_strwidth($typed));
 
@@ -163,7 +177,13 @@ final class Prompt
                     throw new CancelledException('cancelled');
                 }
 
-                if ($key === KeyMap::ENTER || $key === KeyMap::EOF) {
+                // EOF（Ctrl-D や stdin の切断）で既定を選んだことにしてはいけない。
+                // 選択は Enter でしか確定しない。
+                if ($key === KeyMap::EOF) {
+                    throw new CancelledException('input ended before an option was chosen');
+                }
+
+                if ($key === KeyMap::ENTER) {
                     $chosen = $values[$cursor];
                     $this->collapse(
                         $label,

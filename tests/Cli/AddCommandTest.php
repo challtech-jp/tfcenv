@@ -363,9 +363,13 @@ final class AddCommandTest extends TestCase
         $terminal->queueLine('GTM_ID');        // 既存キー
         $terminal->queueKeys(KeyMap::ENTER);   // What now? -> Update the value
         $terminal->queueLine('newvalue');      // value（非 sensitive なので行入力）
-        $terminal->queueEof();                 // ここで入力が途切れる
+        $terminal->queueLine('n');             // もう1件? No → ゲートまで進む
+        $terminal->queueEof();                 // ゲートで入力が途切れる
 
-        $this->command($transport, $terminal)->run();
+        $exit = $this->command($transport, $terminal)->run();
+
+        // ゲートでの EOF は「No」ではなく中止。どちらも書かないが意味は1つに揃える。
+        $this->assertSame(1, $exit);
 
         // 終了コードだけを見てはいけない。早期 return のバグでも 0 になる。
         foreach ($transport->requests() as $request) {

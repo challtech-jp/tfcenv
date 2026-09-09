@@ -128,6 +128,33 @@ final class PickerTest extends TestCase
         }
     }
 
+    public function testEndOfInputCancelsRatherThanConfirmingTheHighlightedItem(): void
+    {
+        // Ctrl-C と同じく中止で終わること。当たっている候補を確定扱いにすると
+        // 意図しないワークスペースへ書き込む道が開く。
+        $terminal = new FakeTerminal();
+        $terminal->queueTyping('beta');
+        $picker = new Picker($terminal, new Style(false));
+
+        try {
+            $picker->pick('Workspace', $this->workspaces());
+            $this->fail('expected a CancelledException');
+        } catch (CancelledException $e) {
+            $this->assertSame(1, $terminal->rawModeRestored());
+            $this->assertStringNotContainsString("\u{2714} Workspace", $terminal->output());
+        }
+    }
+
+    public function testEndOfInputCancelsWhenNothingMatchesEither(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueTyping('zzz');
+        $picker = new Picker($terminal, new Style(false));
+
+        $this->expectException(CancelledException::class);
+        $picker->pick('Workspace', $this->workspaces());
+    }
+
     public function testAnEmptyItemListIsRejected(): void
     {
         $picker = new Picker(new FakeTerminal(), new Style(false));

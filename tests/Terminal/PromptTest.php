@@ -242,6 +242,82 @@ final class PromptTest extends TestCase
     }
 
 
+    public function testTextTreatsEndOfInputAsCancellation(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueEof();
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $this->expectException(CancelledException::class);
+        $prompt->text('Key');
+    }
+
+    public function testTextStillAcceptsABlankLineAsTheDefault(): void
+    {
+        // '' と EOF を取り違えていないことを固定する
+        $terminal = new FakeTerminal();
+        $terminal->queueLine('');
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $this->assertSame('acme', $prompt->text('Organization', 'acme'));
+    }
+
+    public function testTextDoesNotCollapseTheLineWhenInputEnds(): void
+    {
+        // EOF では端末が改行をエコーしないのでカーソルは質問行のまま。
+        // ここで畳むと ESC[1A がひとつ上の回答済み行に当たって消してしまう。
+        $terminal = new FakeTerminal();
+        $terminal->queueEof();
+        $prompt = new Prompt($terminal, new Style(false));
+
+        try {
+            $prompt->text('Key');
+            $this->fail('expected a CancelledException');
+        } catch (CancelledException $e) {
+            $this->assertStringNotContainsString("\e[1A", $terminal->output());
+        }
+    }
+
+    public function testConfirmTreatsEndOfInputAsCancellation(): void
+    {
+        $terminal = new FakeTerminal();
+        $terminal->queueEof();
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $this->expectException(CancelledException::class);
+        $prompt->confirm('Apply?');
+    }
+
+    public function testConfirmTreatsEndOfInputAsCancellationEvenWhenTheDefaultIsNo(): void
+    {
+        // 適用ゲートはここを既定 false で呼ぶ。既定を返して続けるのではなく
+        // 中止すること。どちらも書き込まないが、意味を1つに揃えておく。
+        $terminal = new FakeTerminal();
+        $terminal->queueEof();
+        $prompt = new Prompt($terminal, new Style(false));
+
+        $this->expectException(CancelledException::class);
+        $prompt->confirm('Apply?', false);
+    }
+
+    public function testSelectTreatsEndOfInputAsCancellation(): void
+    {
+        // キューを流さない = 1キー目で EOF。既定を選んだ扱いにしてはいけない。
+        $terminal = new FakeTerminal();
+        $prompt = new Prompt($terminal, new Style(false));
+
+        try {
+            $prompt->select('Category', [
+                'terraform' => 'terraform',
+                'env' => 'env',
+            ], 'env');
+            $this->fail('expected a CancelledException');
+        } catch (CancelledException $e) {
+            $this->assertSame(1, $terminal->rawModeRestored());
+            $this->assertStringNotContainsString("\u{2714} Category", $terminal->output());
+        }
+    }
+
     public function testTextCollapsesTheAnsweredLine(): void
     {
         $terminal = new FakeTerminal();

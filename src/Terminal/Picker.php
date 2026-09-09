@@ -25,7 +25,7 @@ final class Picker
      *
      * @param array<string,string> $items value => 表示ラベル。絞り込みはラベルに対して行う
      * @return string 選ばれた value
-     * @throws CancelledException Ctrl-C
+     * @throws CancelledException Ctrl-C、または確定前に入力が終わったとき
      */
     public function pick(string $label, array $items): string
     {
@@ -53,11 +53,10 @@ final class Picker
                     throw new CancelledException('cancelled');
                 }
 
+                // EOF（Ctrl-D や stdin の切断）は確定ではない。当たっている候補を
+                // 選んだことにすると、意図しないワークスペースに書き込みかねない。
                 if ($key === KeyMap::EOF) {
-                    if ($matches === []) {
-                        throw new CancelledException('no candidate to select');
-                    }
-                    return $this->chosen($label, $matches, $cursor, $filter, $renderedLines);
+                    throw new CancelledException('input ended before a candidate was chosen');
                 }
 
                 if ($key === KeyMap::ENTER) {

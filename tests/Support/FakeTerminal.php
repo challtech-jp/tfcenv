@@ -35,7 +35,7 @@ final class FakeTerminal implements Terminal
 
     /**
      * 以降の readLine() を EOF として扱う。実物の SttyTerminal は stdin が
-     * 閉じたあと '' を返し続けるので、それに合わせる。キュー枯渇時の
+     * 閉じたあと null を返し続けるので、それに合わせる。キュー枯渇時の
      * RuntimeException は「テストが行数を数え間違えた」を捕まえるためのもので、
      * EOF の再現とは別物。
      */
@@ -80,11 +80,11 @@ final class FakeTerminal implements Terminal
         $this->errorOutput .= $text;
     }
 
-    public function readLine(): string
+    public function readLine(): ?string
     {
         if ($this->lines === []) {
             if ($this->atEof) {
-                return '';
+                return null;
             }
 
             // FakeTransport と同じ方針。キューの数え間違いをハングではなく
