@@ -139,22 +139,14 @@ tfcenv add -o <組織名> -w no-such-workspace-xyz KEY=v
 
 ## メンバーへの案内
 
-private リポジトリなので、先に共同作業者として招待する。
-
-```bash
-gh api -X PUT repos/challtech-jp/tfcenv/collaborators/<GitHubのID> -f permission=pull
-```
-
 インストールは1行。更新も同じコマンド。
 
 ```bash
-gh release download -R challtech-jp/tfcenv \
-  -p "tfcenv-$(uname -s | tr 'A-Z' 'a-z')-$(uname -m).tar.gz" -O - | tar xz -C ~/.local/share/
-ln -sf ~/.local/share/tfcenv-*/tfcenv ~/.local/bin/tfcenv
+curl -fsSL https://raw.githubusercontent.com/challtech-jp/tfcenv/main/install.sh | sh
 ```
 
 ブラウザから落とすと macOS の Gatekeeper が検疫属性を付けて開けなくなる。
-`gh` 経由なら付かないので、案内するときはこのコマンドを渡すこと。
+`curl` 経由なら付かないので、案内するときはこのコマンドを渡すこと。
 
 WSL で `ca-certificates` が入っていない場合は通信するコマンドが止まる。
 `sudo apt install ca-certificates` と案内が出る。

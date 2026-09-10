@@ -149,7 +149,20 @@ find "$out" -type f \( -name '*.dylib' -o -name '*.so' -o -name tfcenv \) \
 cat > "$out/tfcenv" <<'LAUNCHER'
 #!/bin/sh
 set -eu
-here=$(cd "$(dirname "$0")" && pwd -P)
+
+# シンボリックリンク経由で起動されても配布物の場所を見失わないよう、
+# $0 のリンクを辿ってから実体のディレクトリを求める。PATH に置くのは
+# ~/.local/bin/tfcenv へのリンクなので、dirname "$0" だとそちらを指してしまう。
+# macOS の readlink には -f が無い環境があるので、自前で辿る。
+self="$0"
+while [ -L "$self" ]; do
+    link=$(readlink "$self")
+    case "$link" in
+        /*) self="$link" ;;
+        *)  self="$(dirname "$self")/$link" ;;
+    esac
+done
+here=$(cd "$(dirname "$self")" && pwd -P)
 
 # 拡張は php.ini に絶対パスでしか書けないので、展開先が判った実行時に書き出す。
 conf="${XDG_CACHE_HOME:-$HOME/.cache}/tfcenv/$(printf '%s' "$here" | tr '/' '-' | tail -c 100)"
@@ -228,6 +241,18 @@ if ! got="$(env -i HOME="$HOME" PATH=/usr/bin:/bin "$out/tfcenv" --version 2>/de
     exit 1
 fi
 echo "  runs with no nix env: $got"
+
+# 2b. シンボリックリンク経由でも動くこと。PATH に置くのはリンクなので、
+#     ここが壊れていると案内どおりに入れた人だけが起動できない。
+lntmp="$(mktemp -d)"
+ln -s "$PWD/$out/tfcenv" "$lntmp/tfcenv"
+if ! env -i HOME="$HOME" PATH=/usr/bin:/bin "$lntmp/tfcenv" --version >/dev/null 2>&1; then
+    echo "  シンボリックリンク経由で起動できません" >&2
+    env -i HOME="$HOME" PATH=/usr/bin:/bin "$lntmp/tfcenv" --version >&2 || true
+    rm -rf "$lntmp"; exit 1
+fi
+rm -rf "$lntmp"
+echo "  runs through a symlink too"
 
 # 3. 拡張が全部ロードできていること。1つでも失敗すると PHP が stderr に警告を出す。
 #    curl.so が読めなければ curl_init が未定義になり、リクエストが1つも送れない。

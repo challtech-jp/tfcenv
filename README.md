@@ -106,9 +106,19 @@ environment variable, and the install location is not known until the tarball
 is unpacked. Move the whole directory, not just `tfcenv`.
 
 ```console
-$ tar xzf tfcenv-darwin-arm64.tar.gz -C ~/.local/share/
-$ ln -sf ~/.local/share/tfcenv-darwin-arm64/tfcenv ~/.local/bin/tfcenv
+$ curl -fsSL https://raw.githubusercontent.com/challtech-jp/tfcenv/main/install.sh | sh
 ```
+
+`install.sh` picks the artifact for the machine it runs on, unpacks it under
+`~/.local/share`, and links `~/.local/bin/tfcenv` to it. It runs the binary
+once before replacing anything, and again through the link afterwards, so a
+download that cannot start on this machine never overwrites a working
+install. `TFCENV_VERSION`, `TFCENV_PREFIX` and `TFCENV_BIN` override the tag
+and the locations.
+
+The link is why the launcher resolves `$0` through its symlinks rather than
+taking `dirname` of it: the thing on `PATH` is the link, and the libraries
+live next to the real file.
 
 `make bundle` refuses to produce an archive that has not passed all four
 checks above, so a broken bundle fails the build instead of reaching someone's

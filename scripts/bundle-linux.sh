@@ -99,7 +99,19 @@ patchelf --set-rpath '$ORIGIN/../lib' "$out/libexec/tfcenv"
 cat > "$out/tfcenv" <<LAUNCHER
 #!/bin/sh
 set -eu
-here=\$(cd "\$(dirname "\$0")" && pwd -P)
+
+# シンボリックリンク経由で起動されても配布物の場所を見失わないよう、
+# \$0 のリンクを辿ってから実体のディレクトリを求める。PATH に置くのは
+# ~/.local/bin/tfcenv へのリンクなので、dirname "\$0" だとそちらを指してしまう。
+self="\$0"
+while [ -L "\$self" ]; do
+    link=\$(readlink "\$self")
+    case "\$link" in
+        /*) self="\$link" ;;
+        *)  self="\$(dirname "\$self")/\$link" ;;
+    esac
+done
+here=\$(cd "\$(dirname "\$self")" && pwd -P)
 
 # 拡張は php.ini に絶対パスでしか書けないので、展開先が判った実行時に書き出す。
 conf="\${XDG_CACHE_HOME:-\$HOME/.cache}/tfcenv/\$(printf '%s' "\$here" | tr '/' '-' | tail -c 100)"
@@ -172,6 +184,18 @@ interp="$(patchelf --print-interpreter "$out/libexec/tfcenv" 2>/dev/null || true
 echo "  PT_INTERP (bypassed by the launcher): ${interp:-none}"
 [ -x "$out/lib/$loader" ] || { echo "  ローダが同梱されていません" >&2; exit 1; }
 echo "  loader bundled: $loader"
+
+# シンボリックリンク経由でも動くこと。PATH に置くのはリンクなので、
+# ここが壊れていると案内どおりに入れた人だけが起動できない。
+lntmp="$(mktemp -d)"
+ln -s "$PWD/$out/tfcenv" "$lntmp/tfcenv"
+if ! "$lntmp/tfcenv" --version >/dev/null 2>&1; then
+    echo "  シンボリックリンク経由で起動できません" >&2
+    "$lntmp/tfcenv" --version >&2 || true
+    rm -rf "$lntmp"; exit 1
+fi
+rm -rf "$lntmp"
+echo "  runs through a symlink too"
 
 tar -C dist -czf "$out.tar.gz" "$(basename "$out")"
 
