@@ -68,6 +68,8 @@ done
 
 ## Distributing it
 
+### macOS
+
 `make bundle` packages the binary with everything it needs, so it runs on a Mac
 with no Nix and no PHP:
 
@@ -112,9 +114,37 @@ $ ln -sf ~/.local/share/tfcenv-darwin-arm64/tfcenv ~/.local/bin/tfcenv
 checks above, so a broken bundle fails the build instead of reaching someone's
 machine.
 
-Only macOS is packaged today. On Linux the dynamic loader itself lives in the
-Nix store, so the same trick needs the loader bundled and invoked explicitly —
-see the notes in `scripts/bundle-macos.sh`.
+### Linux
+
+`make bundle-linux` builds inside a container and packages the result the same
+way. It is a native build in a Linux container, not a cross-compile: the
+target triple TypePHP picks is the host's, and `ld64` cannot emit ELF, so a
+Mac cannot produce a Linux binary directly.
+
+```console
+$ make bundle-linux PLATFORM=linux/amd64   # for WSL
+$ make verify-linux ARCH=x86_64            # run it on a plain Ubuntu, no Nix
+```
+
+The Nix store lives in a named Docker volume. PHP with `embedSupport` and
+`ztsSupport` is not in the binary cache, so the first build compiles it from
+source; keeping the volume is what makes the second build minutes instead of
+tens of minutes.
+
+Linux needs one thing macOS does not: **the dynamic loader itself is in the
+Nix store**, and `PT_INTERP` does not honour `$ORIGIN`, so the path cannot be
+made relative. The loader is bundled and the launcher invokes it explicitly
+with `--library-path`, which is what `nix bundle` does too. The executable's
+`PT_INTERP` still names a Nix path; nothing reads it.
+
+Do not run `patchelf` on the loader while doing this. It bootstraps itself
+before anything else, so a rewritten program header segfaults the process
+before `LD_DEBUG` prints its first line — which is exactly how it presents.
+
+`make verify-linux` runs the artifact on `ubuntu:24.04` with no Nix in sight
+and checks that it starts, that its extensions load, that a missing CA bundle
+stops only the commands that actually talk to the network, and that every
+library resolves inside the bundle.
 
 ## Development shell
 

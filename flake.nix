@@ -74,7 +74,10 @@
               pkgs.jq
               pkgs.curl
               pkgs.git
-            ];
+            ]
+            # 配布物を作るときに参照とローダを書き換える。Linux でしか要らない
+            # （macOS は install_name_tool が Xcode から来る）。
+            ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.patchelf;
 
             # Consumed by tpc.php / PHPX's CMakeLists.
             PHP_HOME = phpHome;

@@ -23,7 +23,7 @@ JOBS     := $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
 RUN := composer run-script
 
-.PHONY: all vendor phpx build run test smoke bundle doctor clean distclean
+.PHONY: all vendor phpx build run test smoke bundle bundle-linux verify-linux doctor clean distclean
 
 all: build
 
@@ -61,6 +61,15 @@ smoke: $(TARGET)
 ## bundle - package ./tfcenv with its libraries so it runs without Nix
 bundle: $(TARGET)
 	@$(RUN) bundle
+
+## bundle-linux - build and package the Linux artifact inside Docker
+## Pass PLATFORM=linux/amd64 for WSL; defaults to this machine's architecture.
+bundle-linux:
+	@./scripts/build-linux.sh $(PLATFORM)
+
+## verify-linux - run the Linux artifact on a plain Ubuntu container, no Nix
+verify-linux:
+	@./scripts/verify-linux.sh $(ARCH)
 
 ## doctor - show what the toolchain resolved to
 doctor:

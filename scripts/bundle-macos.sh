@@ -114,8 +114,8 @@ chmod -R u+w "$out"
 rewrite() {
     local file="$1" rpath="$2" orig resolved name
     while IFS=$'\t' read -r orig resolved; do
-        [ -n "$orig" ] || continue
         name="${bundled[$resolved]:-}"
+        [ -n "$orig" ] || continue
         [ -n "$name" ] || { echo "閉包から漏れた依存: $resolved ($file)" >&2; exit 1; }
         install_name_tool -change "$orig" "@rpath/$name" "$file"
     done < <(deps_pairs "$file")
@@ -168,11 +168,18 @@ if [ -z "${SSL_CERT_FILE:-}" ]; then
         if [ -r "$ca" ]; then SSL_CERT_FILE="$ca"; export SSL_CERT_FILE; break; fi
     done
 fi
+# 束が無いときに止めるのは、実際に通信するコマンドのときだけ。--help と
+# --version は TLS を使わないので、証明書が無い環境でも読めないと困る。
 if [ -z "${SSL_CERT_FILE:-}" ]; then
-    echo "tfcenv: could not find a CA certificate bundle on this system." >&2
-    echo "  Set SSL_CERT_FILE to one, for example:" >&2
-    echo "    export SSL_CERT_FILE=/etc/ssl/cert.pem" >&2
-    exit 1
+    case "${1:-}" in
+        --help|-h|--version|-v|"") ;;
+        *)
+            echo "tfcenv: could not find a CA certificate bundle on this system." >&2
+            echo "  Set SSL_CERT_FILE to one, for example:" >&2
+            echo "    export SSL_CERT_FILE=/etc/ssl/cert.pem" >&2
+            exit 1
+            ;;
+    esac
 fi
 
 PHP_INI_SCAN_DIR="$conf" exec "$here/libexec/tfcenv" "$@"
