@@ -23,7 +23,7 @@ JOBS     := $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
 RUN := composer run-script
 
-.PHONY: all vendor phpx build run test smoke doctor clean distclean
+.PHONY: all vendor phpx build run test smoke bundle doctor clean distclean
 
 all: build
 
@@ -57,6 +57,10 @@ smoke: $(TARGET)
 	@./$(TARGET) --help | grep -q "tfcenv add" || { echo "smoke: --help failed"; exit 1; }
 	@./$(TARGET) nonsense >/dev/null 2>&1 && { echo "smoke: unknown command should fail"; exit 1; } || true
 	@echo "smoke: ok"
+
+## bundle - package ./tfcenv with its libraries so it runs without Nix
+bundle: $(TARGET)
+	@$(RUN) bundle
 
 ## doctor - show what the toolchain resolved to
 doctor:

@@ -37,7 +37,7 @@
             "ln -sf \"$MPFR_LIB_DIR\"/libmpfr*\"$SHLIB_EXT\"* vendor/swoole/phpx/lib/"
         ],
         "compile": "test -n \"$PHPX_HOME\" || { echo 'PHPX_HOME is unset. Run inside: nix develop' >&2; exit 1; }; php vendor/bin/tpc.php project.yml -o tfcenv --no-progress",
-        "clean": "rm -rf build tfcenv",
+        "clean": "rm -rf build dist tfcenv",
         "distclean": [
             "@clean",
             "rm -rf vendor"
@@ -49,15 +49,17 @@
             "printf \"libphp    : %s\\n\" \"$(ls ${PHP_HOME:-/nonexistent}/lib/libphp$SHLIB_EXT 2>/dev/null || echo '<missing>')\"",
             "printf \"libphpx   : %s\\n\" \"$(ls vendor/swoole/phpx/lib/libphpx$SHLIB_EXT 2>/dev/null || echo '<not built>')\"",
             "printf \"tpc       : %s\\n\" \"$(test -f vendor/bin/tpc.php && echo vendor/bin/tpc.php || echo '<not installed>')\""
-        ]
+        ],
+        "bundle": "./scripts/bundle-macos.sh"
     },
     "scripts-descriptions": {
         "tfcenv": "Run the CLI through the PHP interpreter, without an AOT build",
         "test": "Run the PHPUnit suite through the PHP interpreter",
         "phpx": "Build libphpx, the runtime the generated C++ links against",
         "compile": "AOT compile src/ into a native ./tfcenv binary",
-        "clean": "Remove the build directory and the binary",
+        "clean": "Remove the build and dist directories and the binary",
         "distclean": "clean, plus remove vendor/",
-        "doctor": "Show what the toolchain resolved to"
+        "doctor": "Show what the toolchain resolved to",
+        "bundle": "Package ./tfcenv with its libraries so it runs without Nix"
     }
 }

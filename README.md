@@ -66,6 +66,56 @@ for k in PARTNER_TOKEN DB_PASSWORD; do
 done
 ```
 
+## Distributing it
+
+`make bundle` packages the binary with everything it needs, so it runs on a Mac
+with no Nix and no PHP:
+
+```console
+$ make bundle
+  no /nix/store references
+  runs with no nix env: tfcenv 0.1.0
+  extensions load cleanly (curl, mbstring)
+
+bundled: dist/tfcenv-darwin-arm64
+  tar:    12M dist/tfcenv-darwin-arm64.tar.gz
+```
+
+Two things make this necessary, and both are invisible until you hand the
+binary to someone else:
+
+- The AOT binary links `libphp` dynamically, and every path in it — the
+  libraries and the rpath — points into the Nix store. Eleven libraries and
+  their transitive closure get copied in and rewritten to `@rpath`, leaving
+  only `/usr/lib` and `/System/Library` behind, which every Mac has.
+- **The binary starts with no PHP extensions at all.** `curl_init` is
+  undefined, so it cannot send a single request. `curl.so` and `mbstring.so`
+  are bundled with their own dependencies, and a launcher points PHP at them.
+- **The bundled libcurl has no CA bundle path compiled in.** nixpkgs leaves it
+  to the environment, and on a machine with Nix `NIX_SSL_CERT_FILE` supplies
+  it. A teammate has neither, so every TLS handshake would fail. The launcher
+  finds the CA bundle the operating system already maintains
+  (`/etc/ssl/cert.pem` on macOS) rather than shipping certificates that would
+  go stale.
+
+That launcher is why the deliverable is a directory rather than one file: the
+extension paths can only be given to PHP through an ini file named by an
+environment variable, and the install location is not known until the tarball
+is unpacked. Move the whole directory, not just `tfcenv`.
+
+```console
+$ tar xzf tfcenv-darwin-arm64.tar.gz -C ~/.local/share/
+$ ln -sf ~/.local/share/tfcenv-darwin-arm64/tfcenv ~/.local/bin/tfcenv
+```
+
+`make bundle` refuses to produce an archive that has not passed all four
+checks above, so a broken bundle fails the build instead of reaching someone's
+machine.
+
+Only macOS is packaged today. On Linux the dynamic loader itself lives in the
+Nix store, so the same trick needs the loader bundled and invoked explicitly —
+see the notes in `scripts/bundle-macos.sh`.
+
 ## Development shell
 
 One shell, `nix develop`, with everything: PHP 8.5 built with the **embed
