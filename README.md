@@ -116,15 +116,27 @@ machine.
 
 ### Linux
 
-`make bundle-linux` builds inside a container and packages the result the same
-way. It is a native build in a Linux container, not a cross-compile: the
-target triple TypePHP picks is the host's, and `ld64` cannot emit ELF, so a
-Mac cannot produce a Linux binary directly.
+On a Linux machine — WSL included — `make bundle` is all it takes; it
+dispatches on the operating system.
+
+```console
+$ nix develop
+$ make build && make bundle
+```
+
+From a Mac, `make bundle-linux` does the same inside a container. It is still
+a native build, not a cross-compile: the target triple TypePHP picks is the
+host's, and `ld64` cannot emit ELF, so a Mac cannot produce a Linux binary
+directly.
 
 ```console
 $ make bundle-linux PLATFORM=linux/amd64   # for WSL
 $ make verify-linux ARCH=x86_64            # run it on a plain Ubuntu, no Nix
 ```
+
+Emulating x86_64 on Apple Silicon does not work for this: Docker falls back
+to QEMU unless Rosetta is enabled, and `nix develop` segfaults under QEMU.
+Building on an x86_64 machine avoids the question.
 
 The Nix store lives in a named Docker volume. PHP with `embedSupport` and
 `ztsSupport` is not in the binary cache, so the first build compiles it from

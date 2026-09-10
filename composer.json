@@ -50,7 +50,7 @@
             "printf \"libphpx   : %s\\n\" \"$(ls vendor/swoole/phpx/lib/libphpx$SHLIB_EXT 2>/dev/null || echo '<not built>')\"",
             "printf \"tpc       : %s\\n\" \"$(test -f vendor/bin/tpc.php && echo vendor/bin/tpc.php || echo '<not installed>')\""
         ],
-        "bundle": "./scripts/bundle-macos.sh",
+        "bundle": "./scripts/bundle.sh",
         "bundle-linux": "./scripts/build-linux.sh",
         "verify-linux": "./scripts/verify-linux.sh"
     },
@@ -62,8 +62,8 @@
         "clean": "Remove the build and dist directories and the binary",
         "distclean": "clean, plus remove vendor/",
         "doctor": "Show what the toolchain resolved to",
-        "bundle": "Package ./tfcenv with its libraries so it runs without Nix (macOS)",
-        "bundle-linux": "Build and package the Linux artifact inside Docker",
+        "bundle": "Package ./tfcenv with its libraries so it runs without Nix",
+        "bundle-linux": "Cross-build the Linux artifact from macOS, inside Docker",
         "verify-linux": "Run the Linux artifact on a plain Ubuntu container, no Nix"
     }
 }
