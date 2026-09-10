@@ -107,8 +107,8 @@ final class ConfirmationTest extends TestCase
 
         // 一番広いキーと値に合わせて桁が揃い、属性は · で並ぶ
         $this->assertSame([
-            '    create  yrdy      ••••••••     terraform · sensitive · "aaa"',
-            '    update  GTM_ID    GTM-XXXXXXX  terraform · plain · "live"',
+            '    create  yrdy        ••••••••     terraform · sensitive · "aaa"',
+            '    update  GTM_ID      GTM-XXXXXXX  terraform · plain · "live"',
             '    create  partner_id  ••••••••     terraform · sensitive · "連携先連携"',
         ], $this->rows($terminal->output()));
     }
@@ -144,14 +144,15 @@ final class ConfirmationTest extends TestCase
         $rows = $this->rows($terminal->output());
         $this->assertCount(2, $rows);
 
-        // 全角4文字は表示幅8で 'PARTNER-01' と同じ桁。バイト長で埋めると
-        // '連携先' が12バイト扱いになり、下の行の属性だけ右へずれる。
+        // '連携先' は表示幅 6 だが 9 バイト。値の列は 'PARTNER-01'（表示幅 10）に
+        // 合わせるので、表示幅で埋めれば空白4つ、バイト長で埋めると空白1つになり、
+        // 上の行の属性だけ3桁ぶん左へずれる。
         $this->assertSame(
             $this->attributeOffset($rows[0]),
             $this->attributeOffset($rows[1])
         );
         $this->assertSame([
-            '    update  partner_name  連携先  terraform · plain · "連携先連携"',
+            '    update  partner_name  連携先      terraform · plain · "連携先連携"',
             '    update  partner_code  PARTNER-01  terraform · plain · "live"',
         ], $rows);
     }
