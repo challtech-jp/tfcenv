@@ -54,11 +54,21 @@ tar xzf "$tmp/$asset" -C "$tmp" || die "アーカイブを展開できません�
 src="$tmp/tfcenv-$target"
 [ -x "$src/tfcenv" ] || die "アーカイブの中身が想定と違います: $asset"
 
-# --- 動くことを確かめてから入れ替える --------------------------------------
-# 壊れたものを既存のインストールに上書きしないよう、展開したその場で起動する。
+# --- 入れ替える前に、確かめられることは全部確かめる ------------------------
+# 既存のインストールに触る前にやる。順序を逆にすると、壊れた成果物を置いてから
+# 気づくことになり、動いていたものを潰す。
 version=$("$src/tfcenv" --version 2>/dev/null) \
     || die "取得したバイナリがこの環境で起動しませんでした。"
 
+# PATH に置くのはリンクなので、リンク経由でも起動できなければ意味がない。
+# 配布物の launcher が自分の場所を見失う不具合が実際にあった経路。
+mkdir -p "$tmp/link"
+ln -s "$src/tfcenv" "$tmp/link/tfcenv"
+"$tmp/link/tfcenv" --version >/dev/null 2>&1 || die "この成果物はシンボリックリンク
+  経由で起動できません。v0.1.0 の既知の不具合です。何も変更していません。
+  TFCENV_VERSION=v0.1.1 以降を指定してください。"
+
+# --- 入れ替える ------------------------------------------------------------
 mkdir -p "$PREFIX" "$BINDIR"
 dest="$PREFIX/tfcenv-$target"
 rm -rf "$dest.old"
@@ -68,10 +78,6 @@ rm -rf "$dest.old"
 
 # 実体は lib/ を隣に置いたまま動くので、PATH にはリンクだけを置く。
 ln -sf "$dest/tfcenv" "$BINDIR/tfcenv"
-
-# リンク経由で起動できることまで確かめる。ここが配布物の壊れやすい場所。
-"$BINDIR/tfcenv" --version >/dev/null 2>&1 \
-    || die "$BINDIR/tfcenv から起動できませんでした。"
 
 echo "tfcenv: $version"
 echo "tfcenv: $dest に展開し、$BINDIR/tfcenv からリンクしました"
