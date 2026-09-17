@@ -6,10 +6,30 @@ through the web console.
 Written in PHP and AOT-compiled to a native binary with
 [TypePHP](https://github.com/swoole/typephp).
 
-## Requirements
+## Install
 
-[Nix](https://nixos.org) with flakes enabled. Nothing else — no system PHP, no
-Homebrew.
+```console
+$ curl -fsSL https://raw.githubusercontent.com/challtech-jp/tfcenv/main/install.sh | sh
+```
+
+Nothing else is needed on the machine — no Nix, no PHP, no Homebrew. The
+installer picks the artifact for the machine it runs on, unpacks it under
+`~/.local/share`, and links `~/.local/bin/tfcenv` to it. If that directory is
+not already on your `PATH`, put it there in your shell's startup file — an
+`export` typed at the prompt is gone the moment you close the terminal:
+
+```console
+$ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+$ exec $SHELL
+```
+
+Use `~/.bashrc` instead if you are on bash. The installer says the same thing
+when it notices the directory is missing.
+
+`TFCENV_VERSION`, `TFCENV_PREFIX` and `TFCENV_BIN` override the tag and the
+locations. Prebuilt artifacts exist for macOS arm64 and Linux x86_64; on
+anything else, build it yourself — see [Development shell](#development-shell),
+which needs [Nix](https://nixos.org) with flakes enabled and nothing more.
 
 ## Usage
 
@@ -105,16 +125,10 @@ extension paths can only be given to PHP through an ini file named by an
 environment variable, and the install location is not known until the tarball
 is unpacked. Move the whole directory, not just `tfcenv`.
 
-```console
-$ curl -fsSL https://raw.githubusercontent.com/challtech-jp/tfcenv/main/install.sh | sh
-```
-
-`install.sh` picks the artifact for the machine it runs on, unpacks it under
-`~/.local/share`, and links `~/.local/bin/tfcenv` to it. It runs the binary
-once before replacing anything, and again through the link afterwards, so a
-download that cannot start on this machine never overwrites a working
-install. `TFCENV_VERSION`, `TFCENV_PREFIX` and `TFCENV_BIN` override the tag
-and the locations.
+[`install.sh`](#install) is what consumes the release artifact. It runs the
+binary once before replacing anything, and again through the link afterwards,
+so a download that cannot start on this machine never overwrites a working
+install.
 
 The link is why the launcher resolves `$0` through its symlinks rather than
 taking `dirname` of it: the thing on `PATH` is the link, and the libraries
